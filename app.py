@@ -1,0 +1,110 @@
+"""
+Wanwanach Data Hub — Main Page
+==============================
+Streamlit portal สำหรับดึงข้อมูลยอดขาย
+"""
+import streamlit as st
+from datetime import datetime
+
+from config import APP_TITLE, APP_SUBTITLE, DATASETS
+from auth import require_login, current_user, current_role, logout, can_access
+from datasets import dataset_metadata
+from usage_log import log_event
+
+
+st.set_page_config(
+    page_title="Wanwanach Data Hub",
+    page_icon="🥐",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ─── Auth gate ───
+require_login()
+
+# ─── Sidebar ───
+with st.sidebar:
+    st.markdown(f"### 👤 {current_user().get('name', 'User')}")
+    st.caption(f"Role: `{current_role()}`")
+    st.caption(f"📧 {current_user().get('email', '')}")
+    if st.button("🚪 ออกจากระบบ", use_container_width=True):
+        log_event("logout")
+        logout()
+        st.rerun()
+
+    st.divider()
+    st.markdown("### 📖 เมนู")
+    st.page_link("app.py", label="🏠 หน้าแรก")
+    st.page_link("pages/1_📊_datasets.py", label="📊 ข้อมูลทั้งหมด")
+    st.page_link("pages/2_📈_charts.py", label="📈 กราฟ")
+    st.page_link("pages/3_🔑_api_keys.py", label="🔑 API Keys")
+    st.page_link("pages/4_📚_documentation.py", label="📚 คู่มือ / Docs")
+    if current_role() == "admin":
+        st.divider()
+        st.markdown("### ⚙️ Admin")
+        st.page_link("pages/9_⚙️_admin.py", label="👥 Users & Logs")
+
+# ─── Main Content ───
+st.title(APP_TITLE)
+st.caption(APP_SUBTITLE)
+
+# Welcome banner
+st.markdown(
+    f"""
+    <div style="background:linear-gradient(90deg,#1976D2,#42A5F5); padding:20px; border-radius:10px; color:white;">
+        <h3 style="margin:0;">👋 ยินดีต้อนรับ, {current_user().get('name', 'User')}!</h3>
+        <p style="margin:10px 0 0 0; opacity:0.9;">
+            เลือก dataset จากด้านล่างเพื่อเริ่มดูข้อมูล กรอง และดาวน์โหลด
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown("### 📊 Datasets ที่คุณเข้าถึงได้")
+
+# ─── Dataset Cards ───
+accessible = [(did, conf) for did, conf in DATASETS.items() if can_access(conf)]
+
+if not accessible:
+    st.warning("⚠️ Account ของคุณยังไม่มีสิทธิ์เข้าถึง dataset ใดๆ ติดต่อ Admin")
+else:
+    cols = st.columns(2)
+    for i, (dataset_id, conf) in enumerate(accessible):
+        with cols[i % 2]:
+            with st.container(border=True):
+                st.markdown(f"#### {conf['name']}")
+                st.caption(conf["description"])
+
+                # Metadata
+                meta = dataset_metadata(dataset_id)
+                if meta.get("available"):
+                    c1, c2 = st.columns(2)
+                    c1.metric("ขนาด", f"{meta['size_mb']:.1f} MB")
+                    lm = meta["last_modified"]
+                    c2.metric("อัพเดทล่าสุด", lm.strftime("%Y-%m-%d %H:%M"))
+                else:
+                    st.warning(f"⚠️ ไม่พร้อมใช้งาน: {meta.get('error', 'unknown')}")
+
+                st.caption(f"🔄 ความถี่: {conf['update_freq']}")
+
+                # Action buttons
+                b1, b2 = st.columns(2)
+                if b1.button(f"🔍 เปิด", key=f"open_{dataset_id}", use_container_width=True):
+                    st.session_state["selected_dataset"] = dataset_id
+                    st.switch_page("pages/1_📊_datasets.py")
+                if b2.button(f"📈 กราฟ", key=f"chart_{dataset_id}", use_container_width=True):
+                    st.session_state["selected_dataset"] = dataset_id
+                    st.switch_page("pages/2_📈_charts.py")
+
+# ─── Footer ───
+st.divider()
+c1, c2, c3 = st.columns(3)
+c1.caption(f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+c2.caption("🥐 Wanwanach Data Hub v1.0")
+c3.caption("📧 data@wanwanach.com")
+
+# Log the visit
+if "logged_visit" not in st.session_state:
+    log_event("view", "home")
+    st.session_state["logged_visit"] = True
