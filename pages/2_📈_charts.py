@@ -30,7 +30,18 @@ dataset_id = st.selectbox(
     index=default_idx,
 )
 conf = DATASETS[dataset_id]
-df = load_dataset(dataset_id)
+try:
+    df = load_dataset(dataset_id)
+except Exception as e:
+    err_msg = str(e)
+    if "NoSuchKey" in err_msg or "404" in err_msg:
+        st.error(
+            f"⚠️ ยังไม่มีข้อมูลใน R2 — รัน `push_aggregates_to_r2.ipynb` ก่อน\n\n"
+            f"Key: `{conf['source_key']}`"
+        )
+    else:
+        st.error(f"❌ โหลดไม่สำเร็จ: {e}")
+    st.stop()
 log_event("view_chart", dataset_id)
 
 # ─── Chart config ───

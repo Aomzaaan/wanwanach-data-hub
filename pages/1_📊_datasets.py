@@ -40,7 +40,16 @@ st.divider()
 try:
     df = load_dataset(dataset_id)
 except Exception as e:
-    st.error(f"❌ โหลดข้อมูลไม่สำเร็จ: {e}")
+    err_msg = str(e)
+    if "NoSuchKey" in err_msg or "404" in err_msg:
+        st.error(
+            f"⚠️ **ยังไม่มีข้อมูลใน R2 สำหรับ dataset นี้**\n\n"
+            f"ต้องรัน `daily_pipeline/push_aggregates_to_r2.ipynb` "
+            f"เพื่ออัพโหลดข้อมูลก่อน\n\n"
+            f"Key: `{conf['source_key']}`"
+        )
+    else:
+        st.error(f"❌ โหลดข้อมูลไม่สำเร็จ: {e}")
     st.stop()
 
 log_event("view_dataset", dataset_id, {"rows": len(df)})
