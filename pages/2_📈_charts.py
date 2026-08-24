@@ -66,6 +66,14 @@ label_format = st.sidebar.selectbox(
     index=0,
 )
 
+# ⭐ ช่วยเห็นค่าเล็ก (Booth, Online) ที่โดนกลบด้วยค่าใหญ่
+scale_mode = st.sidebar.selectbox(
+    "แสดงผลแบบ:",
+    ["ปกติ (linear)", "100% Stacked (สัดส่วน)", "Log scale"],
+    index=0,
+    help="ค่าเล็กๆ (เช่น Booth) จะเห็นชัดขึ้นถ้าใช้ % หรือ Log",
+)
+
 # Optional filter
 st.sidebar.markdown("### 🎛 กรอง")
 date_col = conf.get("date_col")
@@ -118,13 +126,29 @@ if x_col and y_col:
 
     # ─── Draw ───
     if chart_type == "Bar":
-        fig = px.bar(
-            grouped, x=x_col, y=y_col, color=color_col,
-            text=text_col,
-            title=f"{agg}({y_col}) by {x_col}",
-        )
-        if show_labels:
-            fig.update_traces(textposition="outside", textfont_size=11)
+        # 100% Stacked → normalize each x-group to sum to 100%
+        if scale_mode == "100% Stacked (สัดส่วน)" and color_col:
+            grouped["_total"] = grouped.groupby(x_col)[y_col].transform("sum")
+            grouped["_pct"] = grouped[y_col] / grouped["_total"] * 100
+            grouped["_label"] = grouped["_pct"].apply(lambda v: f"{v:.1f}%")
+            fig = px.bar(
+                grouped, x=x_col, y="_pct", color=color_col,
+                text="_label" if show_labels else None,
+                title=f"{y_col} distribution (% by {x_col})",
+                labels={"_pct": "% of total"},
+            )
+            fig.update_layout(barmode="stack", yaxis_ticksuffix="%", yaxis_range=[0, 100])
+            if show_labels:
+                fig.update_traces(textposition="inside", textfont_size=10)
+        else:
+            fig = px.bar(
+                grouped, x=x_col, y=y_col, color=color_col,
+                text=text_col,
+                title=f"{agg}({y_col}) by {x_col}",
+                barmode="group",
+            )
+            if show_labels:
+                fig.update_traces(textposition="outside", textfont_size=11)
     elif chart_type == "Line":
         fig = px.line(
             grouped, x=x_col, y=y_col, color=color_col,
@@ -153,7 +177,12 @@ if x_col and y_col:
         yaxis=dict(showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
         xaxis=dict(showgrid=False),
     )
-    fig.update_yaxes(tickformat=",.0f")
+    if scale_mode != "100% Stacked (สัดส่วน)":
+        fig.update_yaxes(tickformat=",.0f")
+
+    # Log scale
+    if scale_mode == "Log scale":
+        fig.update_yaxes(type="log")
 
     st.plotly_chart(fig, use_container_width=True)
 
