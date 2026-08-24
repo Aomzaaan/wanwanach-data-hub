@@ -35,8 +35,9 @@ with st.sidebar:
     st.divider()
     st.markdown("### 📖 เมนู")
     st.page_link("app.py", label="🏠 หน้าแรก")
-    st.page_link("pages/1_📊_datasets.py", label="📊 ข้อมูลทั้งหมด")
-    st.page_link("pages/2_📈_charts.py", label="📈 กราฟ")
+    st.page_link("pages/5_📊_dashboard.py", label="📊 Dashboard")
+    st.page_link("pages/1_📊_datasets.py", label="🗂 ข้อมูลทั้งหมด")
+    st.page_link("pages/2_📈_charts.py", label="📈 กราฟ (custom)")
     st.page_link("pages/4_📚_documentation.py", label="📚 คู่มือ / Docs")
     if current_role() == "admin":
         st.divider()
