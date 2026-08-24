@@ -96,17 +96,27 @@ with st.sidebar:
             "ช่วงเวลา",
             ["30 วัน", "3 เดือน", "6 เดือน", "12 เดือน", "ปีนี้ (YTD)", "กำหนดเอง"],
             index=3,
+            help="ช่วง 'เดือน' = เต็มเดือน ตรงกับหน้า Products / Locations",
         )
+        # First day of max_d's month (align to Products/Locations)
+        max_month_start = pd.Timestamp(max_d.year, max_d.month, 1)
+
         if preset == "30 วัน":
             start = max_d - pd.DateOffset(days=30)
+            end = max_d
         elif preset == "3 เดือน":
-            start = max_d - pd.DateOffset(months=3)
+            # Last 3 full months (e.g., if max = 2026-08-31 → Jun 1 → Aug 31)
+            start = max_month_start - pd.DateOffset(months=2)
+            end = max_d
         elif preset == "6 เดือน":
-            start = max_d - pd.DateOffset(months=6)
+            start = max_month_start - pd.DateOffset(months=5)
+            end = max_d
         elif preset == "12 เดือน":
-            start = max_d - pd.DateOffset(months=12)
+            start = max_month_start - pd.DateOffset(months=11)
+            end = max_d
         elif preset == "ปีนี้ (YTD)":
             start = pd.Timestamp(max_d.year, 1, 1)
+            end = max_d
         else:
             date_range = st.date_input(
                 "เลือกช่วง",
@@ -119,10 +129,10 @@ with st.sidebar:
             else:
                 start, end = min_d, max_d
 
-        if preset != "กำหนดเอง":
-            end = max_d
-
         st.caption(f"📅 {start.date()} → {end.date()}")
+        if preset in ("3 เดือน", "6 เดือน", "12 เดือน", "ปีนี้ (YTD)"):
+            n_m = ((end.year - start.year) * 12 + (end.month - start.month) + 1)
+            st.caption(f"= {n_m} เต็มเดือน (ตรงกับ Products/Locations)")
 
         # Channel filter
         channels = sorted(df["channel"].dropna().astype(str).unique().tolist())
