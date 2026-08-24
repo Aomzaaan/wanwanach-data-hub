@@ -281,13 +281,14 @@ col_l, col_r = st.columns(2)
 with col_l:
     st.markdown("### 🏆 Top 15 Branches")
     top_br = (current.groupby("branch_code", as_index=False)["revenue"].sum()
-              .nlargest(15, "revenue"))
+              .nlargest(15, "revenue")).sort_values("revenue")
     if len(top_br) > 0:
+        top_br["branch_label"] = top_br["branch_code"].astype(str)
         fig = px.bar(
-            top_br.sort_values("revenue"),
-            x="revenue", y="branch_code",
+            top_br,
+            x="revenue", y="branch_label",
             orientation="h",
-            text=top_br.sort_values("revenue")["revenue"].apply(fmt_num),
+            text=top_br["revenue"].apply(fmt_num),
             color_discrete_sequence=[COLORS["primary"]],
         )
         fig.update_traces(textposition="outside", textfont_size=10)
@@ -296,7 +297,7 @@ with col_l:
             margin=dict(l=10, r=80, t=20, b=20),
             xaxis_title=None, yaxis_title=None,
             xaxis=dict(tickformat=",.0f", showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
-            yaxis=dict(showgrid=False),
+            yaxis=dict(showgrid=False, type="category"),  # ⭐ Force categorical
         )
         st.plotly_chart(fig, use_container_width=True)
 

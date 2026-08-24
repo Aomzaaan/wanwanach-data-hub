@@ -143,11 +143,12 @@ with col_l:
             top_prod["product_name"].astype(str).str[:30] + " (" +
             top_prod["product_code"].astype(str) + ")"
         )
+        top_prod = top_prod.sort_values("revenue")
         fig = px.bar(
-            top_prod.sort_values("revenue"),
+            top_prod,
             x="revenue", y="label",
             orientation="h",
-            text=top_prod.sort_values("revenue")["revenue"].apply(fmt_num),
+            text=top_prod["revenue"].apply(fmt_num),
             color_discrete_sequence=[COLORS["primary"]],
         )
         fig.update_traces(textposition="outside", textfont_size=10)
@@ -156,7 +157,7 @@ with col_l:
             margin=dict(l=10, r=100, t=20, b=20),
             xaxis_title="Revenue", yaxis_title=None,
             xaxis=dict(tickformat=",.0f", showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
-            yaxis=dict(showgrid=False),
+            yaxis=dict(showgrid=False, type="category"),
         )
         st.plotly_chart(fig, use_container_width=True)
 

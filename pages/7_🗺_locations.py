@@ -154,7 +154,7 @@ with col_l:
                 margin=dict(l=10, r=100, t=20, b=20),
                 xaxis_title="Revenue", yaxis_title=None,
                 xaxis=dict(tickformat=",.0f", showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
-                yaxis=dict(showgrid=False),
+                yaxis=dict(showgrid=False, type="category"),
             )
             st.plotly_chart(fig, use_container_width=True)
 
@@ -202,7 +202,7 @@ with col_l:
                 margin=dict(l=10, r=100, t=20, b=20),
                 xaxis_title="Revenue", yaxis_title=None,
                 xaxis=dict(tickformat=",.0f", showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
-                yaxis=dict(showgrid=False),
+                yaxis=dict(showgrid=False, type="category"),
             )
             st.plotly_chart(fig, use_container_width=True)
 
