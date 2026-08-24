@@ -89,22 +89,9 @@ X: channel
 Y: total_price
 ```
 
-## 🔑 API Keys (ผู้ใช้ Advanced)
-
-**ใช้เมื่อ**: ต้องการดึงข้อมูลผ่าน Python, Excel Power Query, curl
-
-### สร้าง Key
-1. หน้า **🔑 API Keys** → กรอก label เช่น "Excel-office"
-2. คลิก **Generate Key**
-3. Copy key ที่ได้เก็บไว้ (จะเห็นครั้งเดียวเท่านั้น!)
-
-### วิธีใช้
-ดูตัวอย่างในหน้า API Keys → tab **🐍 Python** / **📊 Excel** / **💻 curl**
-
 ## ⚠️ ข้อควรระวัง
 
 - 🔒 **ห้ามแชร์ Username/Password** ให้คนอื่น
-- 🔑 **ห้ามแชร์ API Key** เก็บเป็นความลับ
 - 📥 **Download แล้วห้ามส่งต่อภายนอก** โดยไม่ได้รับอนุญาต
 - 🕐 ข้อมูล **cache 1 ชั่วโมง** — ถ้าไม่เห็น update ล่าสุด รอ 1 ชม.
 
@@ -136,7 +123,6 @@ Y: total_price
 2. **ใช้ Chrome/Edge** — ทำงานได้ดีที่สุด
 3. **Filter ก่อน download** — เร็วกว่าและไฟล์เล็กกว่า
 4. **Parquet + Python** — ประหยัด quota มากที่สุด
-5. **API Key** — ถ้าต้อง download ประจำ ทำให้ automate ได้
 
 ---
 
