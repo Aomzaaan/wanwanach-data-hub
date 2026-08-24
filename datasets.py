@@ -36,10 +36,14 @@ def load_dataset(dataset_id: str) -> pd.DataFrame:
     else:
         raise ValueError(f"Unsupported source_type: {conf['source_type']}")
 
-    # Parse date column if exists
+    # Parse date column if exists — handle mixed formats
     date_col = conf.get("date_col")
     if date_col and date_col in df.columns:
-        df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+        # format='mixed' handles both '2022-01-01' and '2025-01-01 00:00:00.000'
+        try:
+            df[date_col] = pd.to_datetime(df[date_col], errors="coerce", format="mixed")
+        except (ValueError, TypeError):
+            df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
 
     return df
 
