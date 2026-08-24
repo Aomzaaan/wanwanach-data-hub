@@ -37,7 +37,6 @@ with st.sidebar:
     st.page_link("app.py", label="🏠 หน้าแรก")
     st.page_link("pages/1_📊_datasets.py", label="📊 ข้อมูลทั้งหมด")
     st.page_link("pages/2_📈_charts.py", label="📈 กราฟ")
-    st.page_link("pages/3_🔑_api_keys.py", label="🔑 API Keys")
     st.page_link("pages/4_📚_documentation.py", label="📚 คู่มือ / Docs")
     if current_role() == "admin":
         st.divider()

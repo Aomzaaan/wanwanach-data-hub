@@ -9,7 +9,7 @@ require_login()
 
 st.title("📚 คู่มือการใช้งาน")
 
-tab1, tab2, tab3, tab4 = st.tabs(["🏠 เริ่มต้น", "📊 Datasets", "🔑 API", "❓ FAQ"])
+tab1, tab2, tab4 = st.tabs(["🏠 เริ่มต้น", "📊 Datasets", "❓ FAQ"])
 
 with tab1:
     st.markdown("""
@@ -44,46 +44,6 @@ with tab2:
             st.markdown(f"**ความถี่**: {conf['update_freq']}")
             st.markdown(f"**Filters**: {', '.join(conf.get('filters', []))}")
             st.markdown(f"**Roles**: {', '.join(conf['allowed_roles'])}")
-
-with tab3:
-    st.markdown("""
-## API Reference
-
-### Base URL
-```
-https://YOUR-APP.streamlit.app/api/v1
-```
-
-### Authentication
-ใส่ API Key ใน header:
-```
-X-API-Key: wwn_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-### Endpoints
-
-#### GET `/api/v1/datasets`
-List datasets ทั้งหมดที่คุณเข้าถึงได้
-
-#### GET `/api/v1/dataset`
-Query dataset
-
-**Query params**:
-| Param | Type | Description |
-|---|---|---|
-| `dataset` | string | dataset id (เช่น `sales_daily`) |
-| `format` | string | `csv` / `json` / `parquet` |
-| `year` | int | (optional) filter ปี |
-| `month` | int | (optional) filter เดือน |
-| `limit` | int | (optional) max rows (default 100k) |
-
-**Example**:
-```
-GET /api/v1/dataset?dataset=sales_daily&year=2025&format=csv
-```
-
-⚠️ API endpoint นี้จะพร้อมใน v2 — ตอนนี้ใช้ web portal ก่อน
-""")
 
 with tab4:
     st.markdown("""
