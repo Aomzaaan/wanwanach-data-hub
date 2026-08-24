@@ -3,6 +3,8 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+import threading
+import tempfile
 from datetime import datetime
 
 from auth import require_login, current_user, generate_api_key
@@ -17,22 +19,49 @@ st.caption("สร้าง key สำหรับดึงข้อมูลจ
 
 KEY_FILE = ".api_keys.json"
 
+# ⭐ Module-level lock to serialize concurrent writes across user sessions
+_KEY_LOCK = threading.Lock()
+
 
 def _load_keys() -> dict:
     if not os.path.exists(KEY_FILE):
         return {}
-    with open(KEY_FILE, encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(KEY_FILE, encoding="utf-8") as f:
+            content = f.read().strip()
+            return json.loads(content) if content else {}
+    except (json.JSONDecodeError, FileNotFoundError):
+        return {}
 
 
 def _save_keys(keys: dict):
-    with open(KEY_FILE, "w", encoding="utf-8") as f:
-        json.dump(keys, f, ensure_ascii=False, indent=2)
+    # Atomic write: write to temp file → rename (POSIX guarantees atomicity)
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        prefix=".api_keys_",
+        suffix=".tmp",
+        dir=os.path.dirname(os.path.abspath(KEY_FILE)) or ".",
+    )
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            json.dump(keys, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, KEY_FILE)  # atomic
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise
 
 
-all_keys = _load_keys()
+def _update_keys(user: str, mutate_fn):
+    """Thread-safe read-modify-write."""
+    with _KEY_LOCK:
+        all_keys = _load_keys()
+        all_keys[user] = mutate_fn(all_keys.get(user, []))
+        _save_keys(all_keys)
+        return all_keys[user]
+
+
 username = st.session_state["username"]
-my_keys = all_keys.get(username, [])
+my_keys = _load_keys().get(username, [])
 
 # ─── Create new key ───
 st.markdown("### ➕ สร้าง API Key ใหม่")
@@ -42,14 +71,13 @@ with st.form("new_key"):
 
 if submitted and label:
     new_key = generate_api_key()
-    my_keys.append({
+    new_entry = {
         "key": new_key,
         "label": label,
         "created": datetime.now().isoformat(timespec="seconds"),
         "last_used": None,
-    })
-    all_keys[username] = my_keys
-    _save_keys(all_keys)
+    }
+    my_keys = _update_keys(username, lambda existing: existing + [new_entry])
     log_event("create_api_key", meta={"label": label})
     st.success(f"✅ สร้างสำเร็จ! copy key นี้เก็บไว้ ปิดหน้าไปจะไม่เห็นอีก")
     st.code(new_key)
@@ -70,9 +98,8 @@ else:
             c2.caption(f"สร้าง: {k['created']}")
             c2.caption(f"ใช้ล่าสุด: {k.get('last_used') or '-'}")
             if c3.button("🗑 ลบ", key=f"del_{i}"):
-                my_keys.pop(i)
-                all_keys[username] = my_keys
-                _save_keys(all_keys)
+                target_key = k["key"]
+                _update_keys(username, lambda existing: [x for x in existing if x["key"] != target_key])
                 log_event("delete_api_key", meta={"label": k["label"]})
                 st.rerun()
 

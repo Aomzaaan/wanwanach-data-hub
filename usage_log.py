@@ -3,12 +3,16 @@ import streamlit as st
 from datetime import datetime
 import json
 import os
+import threading
 
 LOG_FILE = ".usage_log.jsonl"
 
+# ⭐ Serialize concurrent writes across user sessions
+_LOG_LOCK = threading.Lock()
+
 
 def log_event(event_type: str, dataset_id: str = "", meta: dict = None):
-    """Log a usage event (login, view, download)."""
+    """Log a usage event (login, view, download) — thread-safe."""
     user = st.session_state.get("user", {})
     entry = {
         "ts": datetime.now().isoformat(timespec="seconds"),
@@ -18,9 +22,11 @@ def log_event(event_type: str, dataset_id: str = "", meta: dict = None):
         "dataset": dataset_id,
         "meta": meta or {},
     }
+    line = json.dumps(entry, ensure_ascii=False) + "\n"
     try:
-        with open(LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        with _LOG_LOCK:
+            with open(LOG_FILE, "a", encoding="utf-8") as f:
+                f.write(line)
     except Exception:
         pass  # Don't crash on log failure
 
