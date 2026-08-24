@@ -64,14 +64,17 @@ with st.sidebar:
     if date_col and date_col in df.columns:
         if pd.api.types.is_datetime64_any_dtype(df[date_col]):
             min_d, max_d = df[date_col].min(), df[date_col].max()
-            date_range = st.date_input(
-                f"📅 {date_col}",
-                value=(max_d.date().replace(day=1), max_d.date()) if pd.notna(max_d) else None,
-                min_value=min_d.date() if pd.notna(min_d) else None,
-                max_value=max_d.date() if pd.notna(max_d) else None,
-            )
-            if isinstance(date_range, tuple) and len(date_range) == 2:
-                filters[date_col] = date_range
+            if pd.notna(min_d) and pd.notna(max_d):
+                # Default: last 12 months (or all-time if data < 12 months)
+                default_start = max(min_d.date(), (max_d - pd.DateOffset(years=1)).date())
+                date_range = st.date_input(
+                    f"📅 {date_col}  ({min_d.date()} – {max_d.date()})",
+                    value=(default_start, max_d.date()),
+                    min_value=min_d.date(),
+                    max_value=max_d.date(),
+                )
+                if isinstance(date_range, tuple) and len(date_range) == 2:
+                    filters[date_col] = date_range
 
     # Categorical filters
     for col in conf.get("filters", []):
@@ -136,8 +139,6 @@ else:
     fname = f"{dataset_id}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}"
 
     with d1:
-        if st.button("📄 CSV", use_container_width=True, key="dl_csv"):
-            log_event("download", dataset_id, {"format": "csv", "rows": len(filtered)})
         st.download_button(
             "📄 CSV",
             data=to_csv_bytes(filtered),
@@ -145,6 +146,7 @@ else:
             mime="text/csv",
             use_container_width=True,
             key="dlbtn_csv",
+            on_click=lambda: log_event("download", dataset_id, {"format": "csv", "rows": len(filtered)}),
         )
     with d2:
         st.download_button(
@@ -154,6 +156,7 @@ else:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
             key="dlbtn_xlsx",
+            on_click=lambda: log_event("download", dataset_id, {"format": "xlsx", "rows": len(filtered)}),
         )
     with d3:
         st.download_button(
@@ -163,6 +166,7 @@ else:
             mime="application/octet-stream",
             use_container_width=True,
             key="dlbtn_pq",
+            on_click=lambda: log_event("download", dataset_id, {"format": "parquet", "rows": len(filtered)}),
         )
 
 # ─── Column info ───

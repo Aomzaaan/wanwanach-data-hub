@@ -71,16 +71,18 @@ DATASETS = {
         "allowed_roles": ["admin", "internal", "external"],
         "update_freq": "รายเดือน",
     },
-    "sales_fact_raw": {
-        "name": "📦 ข้อมูลดิบทั้งหมด (Raw)",
-        "description": "Transaction ระดับ line-item — ครบทุกคอลัมน์",
-        "source_type": "r2_csv",
-        "source_key": "raw/sales_fact.csv",
-        "filters": ["source", "branch_code", "product_code", "channel"],
-        "date_col": "date",
-        "allowed_roles": ["admin", "internal"],  # external ไม่เห็น raw
-        "update_freq": "รายวัน",
-    },
+    # Raw data — 1.1 GB — เก็บไว้ใน R2 แต่ไม่ให้ portal โหลด (จะช้า/hang)
+    # ถ้าต้องการ ให้ใช้ signed URL / API key แทน
+    # "sales_fact_raw": {
+    #     "name": "📦 ข้อมูลดิบทั้งหมด (Raw)",
+    #     "description": "Transaction line-item — 1.1 GB (ห้ามโหลดใน browser)",
+    #     "source_type": "r2_csv",
+    #     "source_key": "raw/sales_fact.csv",
+    #     "filters": ["source", "branch_code", "product_code", "channel"],
+    #     "date_col": "date",
+    #     "allowed_roles": ["admin"],  # admin only
+    #     "update_freq": "รายวัน",
+    # },
 }
 
 
