@@ -3,7 +3,7 @@ import streamlit as st
 import bcrypt
 import secrets
 from datetime import datetime
-from config import USERS
+import users_store
 
 
 def hash_password(plain: str) -> str:
@@ -20,7 +20,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def login(username: str, password: str) -> bool:
     """Try login. Return True if success."""
-    user = USERS.get(username)
+    user = users_store.get_user(username)
     if not user:
         return False
     if not verify_password(password, user["password_hash"]):

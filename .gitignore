@@ -1,6 +1,7 @@
 .streamlit/secrets.toml
 .usage_log.jsonl
 .api_keys.json
+.users.json
 __pycache__/
 *.pyc
 .venv/
