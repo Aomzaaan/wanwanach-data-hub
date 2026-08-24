@@ -59,21 +59,45 @@ y_col = st.sidebar.selectbox("แกน Y (ค่า):", num_cols)
 color_col = st.sidebar.selectbox("แยกสีตาม:", [None] + cat_cols)
 agg = st.sidebar.selectbox("Aggregation:", ["sum", "mean", "count", "max", "min"])
 
+show_labels = st.sidebar.checkbox("แสดงตัวเลขบนกราฟ", value=True)
+label_format = st.sidebar.selectbox(
+    "รูปแบบตัวเลข:",
+    ["auto (K/M/B)", "จำนวนเต็ม", "ทศนิยม 2 ตำแหน่ง"],
+    index=0,
+)
+
 # Optional filter
 st.sidebar.markdown("### 🎛 กรอง")
 date_col = conf.get("date_col")
 if date_col and date_col in df.columns and pd.api.types.is_datetime64_any_dtype(df[date_col]):
     min_d, max_d = df[date_col].min(), df[date_col].max()
-    date_range = st.sidebar.date_input(
-        f"📅 {date_col}",
-        value=(max_d.date().replace(day=1), max_d.date()) if pd.notna(max_d) else None,
-        min_value=min_d.date() if pd.notna(min_d) else None,
-        max_value=max_d.date() if pd.notna(max_d) else None,
-    )
-    if isinstance(date_range, tuple) and len(date_range) == 2:
-        df = df[(df[date_col] >= pd.Timestamp(date_range[0])) & (df[date_col] <= pd.Timestamp(date_range[1]))]
+    if pd.notna(min_d) and pd.notna(max_d):
+        default_start = max(min_d.date(), (max_d - pd.DateOffset(years=1)).date())
+        date_range = st.sidebar.date_input(
+            f"📅 {date_col}",
+            value=(default_start, max_d.date()),
+            min_value=min_d.date(),
+            max_value=max_d.date(),
+        )
+        if isinstance(date_range, tuple) and len(date_range) == 2:
+            df = df[(df[date_col] >= pd.Timestamp(date_range[0])) & (df[date_col] <= pd.Timestamp(date_range[1]))]
 
 top_n = st.sidebar.slider("Top N (สำหรับ Bar/Pie):", 5, 50, 15)
+
+
+def _format_num(v):
+    if pd.isna(v):
+        return ""
+    if label_format == "จำนวนเต็ม":
+        return f"{v:,.0f}"
+    if label_format == "ทศนิยม 2 ตำแหน่ง":
+        return f"{v:,.2f}"
+    # auto K/M/B
+    for suffix, div in [("B", 1e9), ("M", 1e6), ("K", 1e3)]:
+        if abs(v) >= div:
+            return f"{v/div:.1f}{suffix}"
+    return f"{v:.0f}"
+
 
 # ─── Aggregate ───
 if x_col and y_col:
@@ -85,22 +109,57 @@ if x_col and y_col:
         top_x = grouped.groupby(x_col, as_index=False)[y_col].sum().nlargest(top_n, y_col)[x_col]
         grouped = grouped[grouped[x_col].isin(top_x)]
 
+    # Prepare label text
+    text_col = None
+    if show_labels:
+        grouped = grouped.copy()
+        grouped["_label"] = grouped[y_col].apply(_format_num)
+        text_col = "_label"
+
     # ─── Draw ───
     if chart_type == "Bar":
-        fig = px.bar(grouped, x=x_col, y=y_col, color=color_col, title=f"{agg}({y_col}) by {x_col}")
+        fig = px.bar(
+            grouped, x=x_col, y=y_col, color=color_col,
+            text=text_col,
+            title=f"{agg}({y_col}) by {x_col}",
+        )
+        if show_labels:
+            fig.update_traces(textposition="outside", textfont_size=11)
     elif chart_type == "Line":
-        fig = px.line(grouped, x=x_col, y=y_col, color=color_col, title=f"{y_col} over {x_col}", markers=True)
+        fig = px.line(
+            grouped, x=x_col, y=y_col, color=color_col,
+            text=text_col,
+            title=f"{y_col} over {x_col}",
+            markers=True,
+        )
+        if show_labels:
+            fig.update_traces(textposition="top center", textfont_size=10)
     elif chart_type == "Pie":
         pie_df = grouped.groupby(x_col, as_index=False)[y_col].sum()
         fig = px.pie(pie_df, names=x_col, values=y_col, title=f"{y_col} distribution by {x_col}")
+        if show_labels:
+            fig.update_traces(textposition="inside", textinfo="percent+label+value")
+        else:
+            fig.update_traces(textinfo="percent+label")
     elif chart_type == "Scatter":
         fig = px.scatter(df, x=x_col, y=y_col, color=color_col, title=f"{y_col} vs {x_col}")
 
-    fig.update_layout(height=550)
+    # Better layout — grid, hover, height
+    fig.update_layout(
+        height=600,
+        hovermode="x unified" if chart_type in ("Line", "Bar") else "closest",
+        legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.02),
+        margin=dict(l=40, r=140, t=60, b=80),
+        yaxis=dict(showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
+        xaxis=dict(showgrid=False),
+    )
+    fig.update_yaxes(tickformat=",.0f")
+
     st.plotly_chart(fig, use_container_width=True)
 
     # Show data table
     with st.expander("📋 ข้อมูลที่ใช้วาด"):
-        st.dataframe(grouped, use_container_width=True, hide_index=True)
+        show_df = grouped.drop(columns=["_label"], errors="ignore")
+        st.dataframe(show_df, use_container_width=True, hide_index=True)
 else:
     st.info("กรุณาเลือกคอลัมน์ X และ Y")
