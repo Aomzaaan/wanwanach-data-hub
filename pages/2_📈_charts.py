@@ -90,7 +90,16 @@ if date_col and date_col in df.columns and pd.api.types.is_datetime64_any_dtype(
         if isinstance(date_range, tuple) and len(date_range) == 2:
             df = df[(df[date_col] >= pd.Timestamp(date_range[0])) & (df[date_col] <= pd.Timestamp(date_range[1]))]
 
-top_n = st.sidebar.slider("Top N (สำหรับ Bar/Pie):", 5, 50, 15)
+top_n = st.sidebar.slider(
+    "Top N (สำหรับ Bar/Pie):",
+    5, 100, 30,
+    help="กรอง top N ของแกน X — ถ้ามาก อาจตัด category เล็กๆ ทิ้ง",
+)
+show_all_x = st.sidebar.checkbox(
+    "แสดง X ทั้งหมด (ไม่ใช้ Top N)",
+    value=False,
+    help="สำคัญเมื่อ X เป็น date หรือ month — แสดงทุกวัน/เดือน",
+)
 
 
 def _format_num(v):
@@ -112,8 +121,8 @@ if x_col and y_col:
     group_cols = [x_col] + ([color_col] if color_col else [])
     grouped = df.groupby(group_cols, as_index=False)[y_col].agg(agg)
 
-    # Top N by y_col
-    if chart_type in ("Bar", "Pie"):
+    # Top N by y_col (skip if user wants all X, e.g. for time-series with color)
+    if chart_type in ("Bar", "Pie") and not show_all_x:
         top_x = grouped.groupby(x_col, as_index=False)[y_col].sum().nlargest(top_n, y_col)[x_col]
         grouped = grouped[grouped[x_col].isin(top_x)]
 
