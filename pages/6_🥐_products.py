@@ -31,16 +31,16 @@ def styled_metric(label, value, delta=None):
     if delta is not None:
         color = COLORS["success"] if delta >= 0 else COLORS["danger"]
         arrow = "▲" if delta >= 0 else "▼"
-        delta_html = f'<div style="color:{color}; font-size:14px; margin-top:4px;">{arrow} {abs(delta):.1f}%</div>'
-    st.markdown(
-        f"""<div style="padding:16px; background:linear-gradient(135deg, #F5F7FA 0%, #E8EAF6 100%);
-                    border-left:4px solid {COLORS['primary']}; border-radius:8px; height:100%;">
-            <div style="color:{COLORS['muted']}; font-size:13px; text-transform:uppercase; letter-spacing:0.5px;">{label}</div>
-            <div style="color:{COLORS['primary']}; font-size:24px; font-weight:700; margin-top:4px;">{value}</div>
-            {delta_html}
-        </div>""",
-        unsafe_allow_html=True,
+        delta_html = f'<div style="color:{color};font-size:14px;margin-top:4px;">{arrow} {abs(delta):.1f}%</div>'
+    html = (
+        f'<div style="padding:16px;background:linear-gradient(135deg,#F5F7FA 0%,#E8EAF6 100%);'
+        f'border-left:4px solid {COLORS["primary"]};border-radius:8px;height:100%;">'
+        f'<div style="color:{COLORS["muted"]};font-size:13px;text-transform:uppercase;letter-spacing:0.5px;">{label}</div>'
+        f'<div style="color:{COLORS["primary"]};font-size:24px;font-weight:700;margin-top:4px;">{value}</div>'
+        f'{delta_html}'
+        f'</div>'
     )
+    st.markdown(html, unsafe_allow_html=True)
 
 
 st.title("🥐 Product Dashboard")

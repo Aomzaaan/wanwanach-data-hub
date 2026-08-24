@@ -29,10 +29,19 @@ def load_dataset(dataset_id: str) -> pd.DataFrame:
     resp = r2.get_object(Bucket=bucket, Key=key)
     body = resp["Body"].read()
 
+    # ⭐ Force string dtype for code-like columns (prevent 10408 → int 10408 → shown as 10.4k)
+    force_str = {
+        "branch_code": str, "product_code": str, "year_month": str,
+        "customer_category": str, "channel": str, "source": str, "route": str,
+        "province": str, "district": str, "area": str,
+    }
     if conf["source_type"] == "r2_csv":
-        df = pd.read_csv(BytesIO(body), encoding="utf-8-sig")
+        df = pd.read_csv(BytesIO(body), encoding="utf-8-sig", dtype=force_str)
     elif conf["source_type"] == "r2_parquet":
         df = pd.read_parquet(BytesIO(body))
+        for c, t in force_str.items():
+            if c in df.columns:
+                df[c] = df[c].astype(str)
     else:
         raise ValueError(f"Unsupported source_type: {conf['source_type']}")
 
