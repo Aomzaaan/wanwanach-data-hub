@@ -204,15 +204,25 @@ col_l, col_r = st.columns([2, 1])
 
 with col_l:
     st.markdown("### 📈 Revenue Trend")
-    trend = (current
-        .assign(month=current["date"].dt.to_period("M").astype(str))
-        .groupby(["month", "channel"], as_index=False)["revenue"].sum()
-    )
+    # ⭐ Auto-switch granularity based on period length
+    if period_days <= 62:                     # ≤ 2 months → daily
+        grain, gr_col = "day", current["date"].dt.date.astype(str)
+    elif period_days <= 366:                  # ≤ 1 year → monthly
+        grain, gr_col = "month", current["date"].dt.to_period("M").astype(str)
+    else:                                     # > 1 year → quarterly
+        grain, gr_col = "quarter", current["date"].dt.to_period("Q").astype(str)
+
+    trend = (current.assign(period=gr_col)
+             .groupby(["period", "channel"], as_index=False)["revenue"].sum())
+
     if len(trend) > 0:
-        fig = px.area(
-            trend, x="month", y="revenue", color="channel",
+        # Line chart safer than area for short periods (won't look empty)
+        chart_fn = px.line if len(trend["period"].unique()) <= 3 else px.area
+        fig = chart_fn(
+            trend, x="period", y="revenue", color="channel",
             color_discrete_map=CHANNEL_COLORS,
             hover_data={"revenue": ":,.0f"},
+            markers=True if chart_fn == px.line else False,
         )
         fig.update_layout(
             height=380,
@@ -224,6 +234,7 @@ with col_l:
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         )
         st.plotly_chart(fig, use_container_width=True)
+        st.caption(f"granularity: {grain} · {len(trend['period'].unique())} periods")
     else:
         st.info("ไม่มีข้อมูล")
 
@@ -283,13 +294,11 @@ with col_l:
 
 with col_r:
     st.markdown("### 📊 Source Breakdown")
-    src_month = (current
-        .assign(month=current["date"].dt.to_period("M").astype(str))
-        .groupby(["month", "source"], as_index=False)["revenue"].sum()
-    )
+    src_month = (current.assign(period=gr_col)
+                 .groupby(["period", "source"], as_index=False)["revenue"].sum())
     if len(src_month) > 0:
         fig = px.bar(
-            src_month, x="month", y="revenue", color="source",
+            src_month, x="period", y="revenue", color="source",
             color_discrete_map=SOURCE_COLORS,
             hover_data={"revenue": ":,.0f"},
         )
@@ -304,6 +313,8 @@ with col_r:
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         )
         st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("ไม่มีข้อมูล")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -321,7 +332,9 @@ with col_l:
     heatmap = (hm_df.groupby(["day_name", "month"], as_index=False)["revenue"].sum()
                .pivot(index="day_name", columns="month", values="revenue")
                .reindex(day_order))
-    if not heatmap.empty:
+    # Drop rows/cols that are all NaN (day_names not in filtered data)
+    heatmap = heatmap.dropna(how="all").dropna(how="all", axis=1)
+    if not heatmap.empty and heatmap.shape[1] >= 1:
         fig = px.imshow(
             heatmap.values,
             x=heatmap.columns,
