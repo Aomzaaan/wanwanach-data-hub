@@ -86,7 +86,13 @@ with st.sidebar:
         else:
             sel_cats = []
 
-        top_n = st.slider("Top N products", 5, 50, 20)
+        rank_mode = st.radio(
+            "🏆 มุมมอง",
+            options=["Top (ขายดี)", "Bottom (ขายไม่ดี)", "Both"],
+            index=0,
+            horizontal=False,
+        )
+        top_n = st.slider("จำนวน N สินค้า", 5, 50, 20)
 
 # ─── Filter ───
 mask = (df[date_col] >= start_m) & (df[date_col] <= end_m)
@@ -139,72 +145,100 @@ with c4:
 st.divider()
 
 # ═══════════════════════════════════════════════════════════
-# 📊 Top Products + Trend
+# 📊 Rank Products (Top / Bottom / Both)
 # ═══════════════════════════════════════════════════════════
-col_l, col_r = st.columns([1, 1])
+def _rank_chart(ranked_df, title, color):
+    """Reusable horizontal bar chart for ranked products."""
+    ranked_df = ranked_df.copy()
+    ranked_df["label"] = (
+        ranked_df["product_name"].astype(str).str[:30] + " (" +
+        ranked_df["product_code"].astype(str) + ")"
+    )
+    ranked_df = ranked_df.sort_values("revenue")
+    fig = px.bar(
+        ranked_df, x="revenue", y="label",
+        orientation="h",
+        text=ranked_df["revenue"].apply(fmt_num),
+        color_discrete_sequence=[color],
+    )
+    fig.update_traces(textposition="outside", textfont_size=10)
+    fig.update_layout(
+        height=max(400, len(ranked_df) * 25),
+        margin=dict(l=10, r=100, t=20, b=20),
+        xaxis_title="Revenue (฿)", yaxis_title=None,
+        xaxis=dict(tickformat=".2s", ticksuffix="฿", showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
+        yaxis=dict(showgrid=False, type="category"),
+    )
+    return fig
 
-with col_l:
-    st.markdown(f"### 🏆 Top {top_n} Products by Revenue")
-    top_prod = (current.groupby(["product_code", "product_name"], as_index=False)
-                .agg(revenue=("revenue", "sum"), qty=("qty", "sum"))
-                .nlargest(top_n, "revenue"))
-    if len(top_prod) > 0:
-        top_prod["label"] = (
-            top_prod["product_name"].astype(str).str[:30] + " (" +
-            top_prod["product_code"].astype(str) + ")"
-        )
-        top_prod = top_prod.sort_values("revenue")
-        fig = px.bar(
-            top_prod,
-            x="revenue", y="label",
-            orientation="h",
-            text=top_prod["revenue"].apply(fmt_num),
-            color_discrete_sequence=[COLORS["primary"]],
-        )
-        fig.update_traces(textposition="outside", textfont_size=10)
-        fig.update_layout(
-            height=max(400, top_n * 25),
-            margin=dict(l=10, r=100, t=20, b=20),
-            xaxis_title="Revenue", yaxis_title=None,
-            xaxis=dict(tickformat=".2s", ticksuffix="฿", showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
-            yaxis=dict(showgrid=False, type="category"),
-        )
-        st.plotly_chart(fig, use_container_width=True)
 
-with col_r:
-    # ⭐ Trend limit — cap at 10 lines (readable), respects top_n slider
-    trend_n = min(top_n, 10)
-    st.markdown(f"### 📈 Monthly Trend (Top {trend_n} products)")
-    top_codes = top_prod.head(trend_n)["product_code"].tolist() if len(top_prod) else []
-    if top_codes:
-        trend = current[current["product_code"].isin(top_codes)]
-        trend_pv = (trend.groupby([date_col, "product_code", "product_name"], as_index=False)["revenue"].sum())
-        # Short label + include code for uniqueness (some products share names)
-        trend_pv["label"] = trend_pv["product_name"].astype(str).str[:18] + " (" + trend_pv["product_code"].astype(str) + ")"
+# Group once for both Top and Bottom
+all_products = (current.groupby(["product_code", "product_name"], as_index=False)
+                .agg(revenue=("revenue", "sum"), qty=("qty", "sum")))
+# Filter out products with 0 revenue (they're noise for Bottom)
+all_products = all_products[all_products["revenue"] > 0]
 
-        fig = px.line(
-            trend_pv, x=date_col, y="revenue",
-            color="label",
-            markers=True,
-            hover_data={"revenue": ":,.0f", "product_code": True},
-        )
-        # ⭐ Legend on RIGHT side (vertical) — no overlap with x-axis
-        legend_rows = (trend_n + 1) // 2  # 2 per row estimate
-        fig.update_layout(
-            height=max(450, top_n * 25),
-            margin=dict(l=20, r=20, t=20, b=20),
-            hovermode="x unified",
-            xaxis_title=None, yaxis_title="Revenue (฿)",
-            yaxis=dict(showgrid=True, gridcolor="rgba(200,200,200,0.3)", tickformat=".2s", ticksuffix="฿"),
-            xaxis=dict(showgrid=False, tickangle=-30),
-            legend=dict(
-                orientation="v",
-                yanchor="top", y=1, xanchor="left", x=1.02,
-                font=dict(size=10),
-                title_text="",
-            ),
-        )
-        st.plotly_chart(fig, use_container_width=True)
+top_prod    = all_products.nlargest(top_n, "revenue")
+bottom_prod = all_products.nsmallest(top_n, "revenue")
+
+show_top    = rank_mode in ("Top (ขายดี)", "Both")
+show_bottom = rank_mode in ("Bottom (ขายไม่ดี)", "Both")
+
+if rank_mode == "Both":
+    col_l, col_r = st.columns([1, 1])
+    with col_l:
+        st.markdown(f"### 🏆 Top {top_n} — ขายดี")
+        if len(top_prod) > 0:
+            st.plotly_chart(_rank_chart(top_prod, "Top", COLORS["success"]), use_container_width=True)
+    with col_r:
+        st.markdown(f"### 📉 Bottom {top_n} — ขายไม่ดี")
+        if len(bottom_prod) > 0:
+            st.plotly_chart(_rank_chart(bottom_prod, "Bottom", COLORS["danger"]), use_container_width=True)
+else:
+    col_l, col_r = st.columns([1, 1])
+    with col_l:
+        if show_top:
+            st.markdown(f"### 🏆 Top {top_n} Products by Revenue")
+            if len(top_prod) > 0:
+                st.plotly_chart(_rank_chart(top_prod, "Top", COLORS["primary"]), use_container_width=True)
+        else:
+            st.markdown(f"### 📉 Bottom {top_n} Products by Revenue")
+            if len(bottom_prod) > 0:
+                st.plotly_chart(_rank_chart(bottom_prod, "Bottom", COLORS["danger"]), use_container_width=True)
+
+    with col_r:
+        # ⭐ Trend limit — cap at 10 lines (readable)
+        trend_n = min(top_n, 10)
+        trend_source = top_prod if show_top else bottom_prod
+        trend_label = "Top" if show_top else "Bottom"
+        st.markdown(f"### 📈 Monthly Trend ({trend_label} {trend_n})")
+        top_codes = trend_source.head(trend_n)["product_code"].tolist() if len(trend_source) else []
+        if top_codes:
+            trend = current[current["product_code"].isin(top_codes)]
+            trend_pv = (trend.groupby([date_col, "product_code", "product_name"], as_index=False)["revenue"].sum())
+            trend_pv["label"] = trend_pv["product_name"].astype(str).str[:18] + " (" + trend_pv["product_code"].astype(str) + ")"
+
+            fig = px.line(
+                trend_pv, x=date_col, y="revenue",
+                color="label",
+                markers=True,
+                hover_data={"revenue": ":,.0f", "product_code": True},
+            )
+            fig.update_layout(
+                height=max(450, top_n * 25),
+                margin=dict(l=20, r=20, t=20, b=20),
+                hovermode="x unified",
+                xaxis_title=None, yaxis_title="Revenue (฿)",
+                yaxis=dict(showgrid=True, gridcolor="rgba(200,200,200,0.3)", tickformat=".2s", ticksuffix="฿"),
+                xaxis=dict(showgrid=False, tickangle=-30),
+                legend=dict(
+                    orientation="v",
+                    yanchor="top", y=1, xanchor="left", x=1.02,
+                    font=dict(size=10),
+                    title_text="",
+                ),
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
 
 # ═══════════════════════════════════════════════════════════
