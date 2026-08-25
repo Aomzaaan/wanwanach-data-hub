@@ -18,9 +18,14 @@ def _r2_client():
     )
 
 
-@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner="⏳ กำลังดึงข้อมูล...")
-def load_dataset(dataset_id: str) -> pd.DataFrame:
-    """Load dataset from R2 (cached)."""
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner="⏳ กำลังดึงข้อมูล...", max_entries=8)
+def load_dataset(dataset_id: str, nrows: int | None = None) -> pd.DataFrame:
+    """Load dataset from R2 (cached).
+
+    Args:
+        dataset_id: dataset key
+        nrows: ถ้าระบุ = อ่านแค่ N แถวแรก (Sample mode) — เร็ว + ประหยัด RAM
+    """
     conf = DATASETS[dataset_id]
     r2 = _r2_client()
     bucket = st.secrets["r2"]["bucket"]
@@ -36,9 +41,11 @@ def load_dataset(dataset_id: str) -> pd.DataFrame:
         "province": str, "district": str, "area": str,
     }
     if conf["source_type"] == "r2_csv":
-        df = pd.read_csv(BytesIO(body), encoding="utf-8-sig", dtype=force_str)
+        df = pd.read_csv(BytesIO(body), encoding="utf-8-sig", dtype=force_str, nrows=nrows)
     elif conf["source_type"] == "r2_parquet":
         df = pd.read_parquet(BytesIO(body))
+        if nrows:
+            df = df.head(nrows)
         for c, t in force_str.items():
             if c in df.columns:
                 df[c] = df[c].astype(str)
