@@ -172,12 +172,15 @@ with col_l:
         st.plotly_chart(fig, use_container_width=True)
 
 with col_r:
-    st.markdown("### 📈 Monthly Trend (Top 5 products)")
-    top5 = top_prod.head(5)["product_code"].tolist() if len(top_prod) else []
-    if top5:
-        trend = current[current["product_code"].isin(top5)]
+    # ⭐ Trend limit — cap at 10 lines (readable), respects top_n slider
+    trend_n = min(top_n, 10)
+    st.markdown(f"### 📈 Monthly Trend (Top {trend_n} products)")
+    top_codes = top_prod.head(trend_n)["product_code"].tolist() if len(top_prod) else []
+    if top_codes:
+        trend = current[current["product_code"].isin(top_codes)]
         trend_pv = (trend.groupby([date_col, "product_code", "product_name"], as_index=False)["revenue"].sum())
-        trend_pv["label"] = trend_pv["product_name"].astype(str).str[:20] + "..."
+        # Short label + include code for uniqueness (some products share names)
+        trend_pv["label"] = trend_pv["product_name"].astype(str).str[:18] + " (" + trend_pv["product_code"].astype(str) + ")"
 
         fig = px.line(
             trend_pv, x=date_col, y="revenue",
@@ -185,14 +188,21 @@ with col_r:
             markers=True,
             hover_data={"revenue": ":,.0f", "product_code": True},
         )
+        # ⭐ Legend on RIGHT side (vertical) — no overlap with x-axis
+        legend_rows = (trend_n + 1) // 2  # 2 per row estimate
         fig.update_layout(
-            height=max(400, top_n * 25),
-            margin=dict(l=20, r=20, t=20, b=40),
+            height=max(450, top_n * 25),
+            margin=dict(l=20, r=20, t=20, b=20),
             hovermode="x unified",
-            xaxis_title=None, yaxis_title="Revenue",
+            xaxis_title=None, yaxis_title="Revenue (฿)",
             yaxis=dict(showgrid=True, gridcolor="rgba(200,200,200,0.3)", tickformat=".2s", ticksuffix="฿"),
-            xaxis=dict(showgrid=False),
-            legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5),
+            xaxis=dict(showgrid=False, tickangle=-30),
+            legend=dict(
+                orientation="v",
+                yanchor="top", y=1, xanchor="left", x=1.02,
+                font=dict(size=10),
+                title_text="",
+            ),
         )
         st.plotly_chart(fig, use_container_width=True)
 
