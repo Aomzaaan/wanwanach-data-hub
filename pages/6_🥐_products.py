@@ -80,12 +80,20 @@ with st.sidebar:
         channels = sorted(df["channel"].dropna().astype(str).unique().tolist()) if "channel" in df.columns else []
         sel_channels = st.multiselect("ช่องทาง", channels, default=[])
 
+        if "customer_category" in df.columns:
+            cats = sorted(df["customer_category"].dropna().astype(str).unique().tolist())
+            sel_cats = st.multiselect("กลุ่มลูกค้า", cats, default=[])
+        else:
+            sel_cats = []
+
         top_n = st.slider("Top N products", 5, 50, 20)
 
 # ─── Filter ───
 mask = (df[date_col] >= start_m) & (df[date_col] <= end_m)
 if sel_channels and "channel" in df.columns:
     mask &= df["channel"].astype(str).isin(sel_channels)
+if sel_cats and "customer_category" in df.columns:
+    mask &= df["customer_category"].astype(str).isin(sel_cats)
 current = df[mask].copy()
 
 # Previous period (same length)
@@ -98,6 +106,8 @@ if prev_end_idx >= 0:
     prev_mask = (df[date_col] >= prev_start) & (df[date_col] <= prev_end)
     if sel_channels and "channel" in df.columns:
         prev_mask &= df["channel"].astype(str).isin(sel_channels)
+    if sel_cats and "customer_category" in df.columns:
+        prev_mask &= df["customer_category"].astype(str).isin(sel_cats)
     previous = df[prev_mask].copy()
 else:
     previous = pd.DataFrame(columns=df.columns)

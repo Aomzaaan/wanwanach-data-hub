@@ -150,10 +150,18 @@ with st.sidebar:
         sources = sorted(df["source"].dropna().astype(str).unique().tolist())
         sel_sources = st.multiselect("แหล่งข้อมูล", sources, default=[])
 
+        # Customer category filter
+        if "customer_category" in df.columns:
+            cats = sorted(df["customer_category"].dropna().astype(str).unique().tolist())
+            sel_cats = st.multiselect("กลุ่มลูกค้า", cats, default=[])
+        else:
+            sel_cats = []
+
     else:
         start, end = df["date"].min(), df["date"].max()
         sel_channels = []
         sel_sources = []
+        sel_cats = []
 
 # ─── Apply filters ───
 mask = (df["date"] >= start) & (df["date"] <= end)
@@ -161,6 +169,8 @@ if sel_channels:
     mask &= df["channel"].astype(str).isin(sel_channels)
 if sel_sources:
     mask &= df["source"].astype(str).isin(sel_sources)
+if sel_cats and "customer_category" in df.columns:
+    mask &= df["customer_category"].astype(str).isin(sel_cats)
 current = df[mask].copy()
 
 # Previous period (same length, before start)
@@ -172,6 +182,8 @@ if sel_channels:
     prev_mask &= df["channel"].astype(str).isin(sel_channels)
 if sel_sources:
     prev_mask &= df["source"].astype(str).isin(sel_sources)
+if sel_cats and "customer_category" in df.columns:
+    prev_mask &= df["customer_category"].astype(str).isin(sel_cats)
 previous = df[prev_mask].copy()
 
 if len(current) == 0:
