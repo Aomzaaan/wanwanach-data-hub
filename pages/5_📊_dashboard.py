@@ -236,8 +236,12 @@ with col_l:
             height=380,
             margin=dict(l=20, r=20, t=20, b=40),
             hovermode="x unified",
-            xaxis_title=None, yaxis_title=None,
-            yaxis=dict(showgrid=True, gridcolor="rgba(200,200,200,0.3)", tickformat=",.0f"),
+            xaxis_title=None, yaxis_title="Revenue (฿)",
+            yaxis=dict(
+                showgrid=True, gridcolor="rgba(200,200,200,0.3)",
+                tickformat=".2s",  # SI notation: 2.5M, 30M, 1.5B
+                ticksuffix="฿",
+            ),
             xaxis=dict(showgrid=False),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         )
@@ -295,8 +299,12 @@ with col_l:
         fig.update_layout(
             height=450,
             margin=dict(l=10, r=80, t=20, b=20),
-            xaxis_title=None, yaxis_title=None,
-            xaxis=dict(tickformat=",.0f", showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
+            xaxis_title="Revenue (฿)", yaxis_title=None,
+            xaxis=dict(
+                tickformat=".2s",  # 10M instead of 10,000,000
+                ticksuffix="฿",
+                showgrid=True, gridcolor="rgba(200,200,200,0.3)",
+            ),
             yaxis=dict(showgrid=False, type="category"),  # ⭐ Force categorical
         )
         st.plotly_chart(fig, use_container_width=True)
@@ -315,8 +323,11 @@ with col_r:
             height=450,
             barmode="stack",
             margin=dict(l=20, r=20, t=20, b=40),
-            xaxis_title=None, yaxis_title=None,
-            yaxis=dict(showgrid=True, gridcolor="rgba(200,200,200,0.3)", tickformat=",.0f"),
+            xaxis_title=None, yaxis_title="Revenue (฿)",
+            yaxis=dict(
+                showgrid=True, gridcolor="rgba(200,200,200,0.3)",
+                tickformat=".2s", ticksuffix="฿",
+            ),
             xaxis=dict(showgrid=False),
             hovermode="x unified",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -344,13 +355,20 @@ with col_l:
     # Drop rows/cols that are all NaN (day_names not in filtered data)
     heatmap = heatmap.dropna(how="all").dropna(how="all", axis=1)
     if not heatmap.empty and heatmap.shape[1] >= 1:
+        # ⭐ Format text overlay ให้อ่านง่าย (K/M/B)
+        text_matrix = [[fmt_num(v) if pd.notna(v) else "" for v in row] for row in heatmap.values]
         fig = px.imshow(
             heatmap.values,
             x=heatmap.columns,
             y=heatmap.index,
             aspect="auto",
             color_continuous_scale="Blues",
-            labels=dict(x="Month", y="Day", color="Revenue"),
+            labels=dict(x="Month", y="Day", color="Revenue (฿)"),
+        )
+        fig.update_traces(
+            text=text_matrix, texttemplate="%{text}",
+            textfont=dict(size=10),
+            hovertemplate="<b>%{y}</b> · %{x}<br>Revenue: %{text}<extra></extra>",
         )
         fig.update_layout(
             height=380,
@@ -385,9 +403,12 @@ with col_r:
         fig.update_layout(
             height=380,
             margin=dict(l=20, r=100, t=20, b=40),
-            xaxis_title="Revenue",
+            xaxis_title="Revenue (฿)",
             yaxis_title=None,
-            xaxis=dict(tickformat=",.0f", showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
+            xaxis=dict(
+                tickformat=".2s", ticksuffix="฿",
+                showgrid=True, gridcolor="rgba(200,200,200,0.3)",
+            ),
             yaxis=dict(showgrid=False),
         )
         st.plotly_chart(fig, use_container_width=True)

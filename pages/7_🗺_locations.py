@@ -153,7 +153,7 @@ with col_l:
                 height=500,
                 margin=dict(l=10, r=100, t=20, b=20),
                 xaxis_title="Revenue", yaxis_title=None,
-                xaxis=dict(tickformat=",.0f", showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
+                xaxis=dict(tickformat=".2s", ticksuffix="฿", showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
                 yaxis=dict(showgrid=False, type="category"),
             )
             st.plotly_chart(fig, use_container_width=True)
@@ -201,7 +201,7 @@ with col_l:
                 height=500,
                 margin=dict(l=10, r=100, t=20, b=20),
                 xaxis_title="Revenue", yaxis_title=None,
-                xaxis=dict(tickformat=",.0f", showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
+                xaxis=dict(tickformat=".2s", ticksuffix="฿", showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
                 yaxis=dict(showgrid=False, type="category"),
             )
             st.plotly_chart(fig, use_container_width=True)
@@ -223,7 +223,7 @@ with col_r:
                 margin=dict(l=20, r=20, t=20, b=40),
                 hovermode="x unified",
                 xaxis_title=None, yaxis_title="Revenue",
-                yaxis=dict(showgrid=True, gridcolor="rgba(200,200,200,0.3)", tickformat=",.0f"),
+                yaxis=dict(showgrid=True, gridcolor="rgba(200,200,200,0.3)", tickformat=".2s", ticksuffix="฿"),
                 xaxis=dict(showgrid=False),
                 legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5),
             )
