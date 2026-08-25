@@ -244,14 +244,25 @@ with col_l:
              .groupby(["period", "channel"], as_index=False)["revenue"].sum())
 
     if len(trend) > 0:
-        # Line chart safer than area for short periods (won't look empty)
-        chart_fn = px.line if len(trend["period"].unique()) <= 3 else px.area
-        fig = chart_fn(
-            trend, x="period", y="revenue", color="channel",
-            color_discrete_map=CHANNEL_COLORS,
-            hover_data={"revenue": ":,.0f"},
-            markers=True if chart_fn == px.line else False,
-        )
+        # ⭐ Chart type by period count:
+        #   ≤ 3 periods → Grouped bar (ชัดเจน, เห็นความต่างระหว่าง channel ใน period เดียวกัน)
+        #   > 3 periods → Area chart (ดู trend รวม)
+        n_periods = len(trend["period"].unique())
+        if n_periods <= 3:
+            fig = px.bar(
+                trend, x="period", y="revenue", color="channel",
+                color_discrete_map=CHANNEL_COLORS,
+                barmode="group",
+                text=trend["revenue"].apply(fmt_num),
+                hover_data={"revenue": ":,.0f"},
+            )
+            fig.update_traces(textposition="outside", textfont_size=10)
+        else:
+            fig = px.area(
+                trend, x="period", y="revenue", color="channel",
+                color_discrete_map=CHANNEL_COLORS,
+                hover_data={"revenue": ":,.0f"},
+            )
         fig.update_layout(
             height=380,
             margin=dict(l=20, r=20, t=20, b=40),
