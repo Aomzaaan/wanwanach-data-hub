@@ -72,6 +72,9 @@ def styled_metric(label, value, delta=None, delta_prefix="", help=None):
 st.title("📊 Executive Dashboard")
 st.caption(f"อัพเดทล่าสุด: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
+# ⭐ Memory-safe: cap max range (Streamlit Free tier = 1 GB RAM)
+_MAX_MONTHS = 48  # 4 ปี max
+
 # ─── Load sales_daily ───
 if not can_access(DATASETS.get("sales_daily", {})):
     st.warning("ยังไม่มีสิทธิ์เข้าถึง")
@@ -82,6 +85,11 @@ try:
 except Exception as e:
     st.error(f"โหลดข้อมูลไม่สำเร็จ: {e}")
     st.stop()
+
+# ⭐ Memory-friendly: convert string cols to categorical (saves ~70% RAM)
+for _c in ["source", "channel", "customer_category", "branch_code"]:
+    if _c in df.columns and df[_c].dtype == "object":
+        df[_c] = df[_c].astype("category")
 
 log_event("view_dashboard", "sales_daily")
 
@@ -169,6 +177,18 @@ previous = df[prev_mask].copy()
 if len(current) == 0:
     st.warning("ไม่มีข้อมูลในช่วงเวลาที่เลือก")
     st.stop()
+
+# ⭐ Guard: ถ้าช่วงยาวเกินไป → ตัด (ป้องกัน OOM crash)
+_n_months = ((end.year - start.year) * 12 + (end.month - start.month) + 1)
+if _n_months > _MAX_MONTHS:
+    st.warning(
+        f"⚠️ ช่วงเวลาที่เลือก **{_n_months} เดือน** ยาวเกิน limit ({_MAX_MONTHS} เดือน)\n\n"
+        f"อาจทำให้ระบบค้าง — ตัดเป็น {_MAX_MONTHS} เดือนล่าสุดอัตโนมัติ"
+    )
+    cutoff = end - pd.DateOffset(months=_MAX_MONTHS)
+    current = current[current["date"] >= cutoff].copy()
+    start = cutoff
+    period_days = (end - start).days + 1
 
 
 # ═══════════════════════════════════════════════════════════
@@ -344,16 +364,22 @@ col_l, col_r = st.columns(2)
 
 with col_l:
     st.markdown("### 🔥 Weekly Pattern (day × month)")
-    hm_df = current.copy()
-    hm_df["day_name"] = hm_df["date"].dt.day_name()
-    hm_df["month"] = hm_df["date"].dt.to_period("M").astype(str)
-    day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    # ⭐ Safeguard: skip heatmap if too many months (RAM heavy) or too few (meaningless)
+    n_months_period = ((end.year - start.year) * 12 + (end.month - start.month) + 1)
+    if n_months_period > 36:
+        st.info(f"ℹ️ ช่วงที่เลือก {n_months_period} เดือน ใหญ่เกินไปสำหรับ heatmap — เลือกช่วงสั้นลง (≤ 36 เดือน) เพื่อดู pattern รายวัน")
+        heatmap = pd.DataFrame()
+    else:
+        hm_df = current[["date", "revenue"]].copy()
+        hm_df["day_name"] = hm_df["date"].dt.day_name()
+        hm_df["month"] = hm_df["date"].dt.to_period("M").astype(str)
+        day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
-    heatmap = (hm_df.groupby(["day_name", "month"], as_index=False)["revenue"].sum()
-               .pivot(index="day_name", columns="month", values="revenue")
-               .reindex(day_order))
-    # Drop rows/cols that are all NaN (day_names not in filtered data)
-    heatmap = heatmap.dropna(how="all").dropna(how="all", axis=1)
+        heatmap = (hm_df.groupby(["day_name", "month"], as_index=False)["revenue"].sum()
+                   .pivot(index="day_name", columns="month", values="revenue")
+                   .reindex(day_order))
+        heatmap = heatmap.dropna(how="all").dropna(how="all", axis=1)
+        del hm_df
     if not heatmap.empty and heatmap.shape[1] >= 1:
         # ⭐ Format text overlay ให้อ่านง่าย (K/M/B)
         text_matrix = [[fmt_num(v) if pd.notna(v) else "" for v in row] for row in heatmap.values]
