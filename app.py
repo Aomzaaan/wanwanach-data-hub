@@ -10,6 +10,7 @@ from config import APP_TITLE, APP_SUBTITLE, DATASETS
 from auth import require_login, current_user, current_role, logout, can_access
 from datasets import dataset_metadata
 from usage_log import log_event
+from time_utils import th_now, th_str
 
 
 st.set_page_config(
@@ -85,7 +86,7 @@ else:
                     c1, c2 = st.columns(2)
                     c1.metric("ขนาด", f"{meta['size_mb']:.1f} MB")
                     lm = meta["last_modified"]
-                    c2.metric("อัพเดทล่าสุด", lm.strftime("%Y-%m-%d %H:%M"))
+                    c2.metric("อัพเดทล่าสุด", th_str(lm))
                 else:
                     st.warning(f"⚠️ ไม่พร้อมใช้งาน: {meta.get('error', 'unknown')}")
 
@@ -103,7 +104,7 @@ else:
 # ─── Footer ───
 st.divider()
 c1, c2, c3 = st.columns(3)
-c1.caption(f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+c1.caption(f"🕐 {th_str()}")
 c2.caption("🥐 Wanwanach Data Hub v1.0")
 c3.caption("📧 data@wanwanach.com")
 

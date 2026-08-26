@@ -7,6 +7,7 @@ from auth import require_login, can_access, current_role
 from datasets import load_dataset, apply_filters, dataset_metadata
 from downloads import to_csv_bytes, to_excel_bytes, to_parquet_bytes
 from usage_log import log_event
+from time_utils import th_str
 
 
 st.set_page_config(page_title="Datasets — Wanwanach", page_icon="📊", layout="wide")
@@ -52,7 +53,7 @@ with top_r:
         st.metric(
             "📦 ขนาดไฟล์",
             f"{size_mb:,.1f} MB",
-            help=f"Last update: {last_mod.strftime('%Y-%m-%d %H:%M') if last_mod else '-'}",
+            help=f"Last update: {th_str(last_mod) if last_mod else '-'}",
         )
     else:
         st.error("❌ ไม่พบไฟล์")

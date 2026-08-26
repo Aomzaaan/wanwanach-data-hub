@@ -8,6 +8,7 @@ from config import DATASETS
 from auth import require_login, can_access
 from datasets import load_dataset
 from usage_log import log_event
+from time_utils import th_str
 
 
 st.set_page_config(page_title="Locations — Wanwanach", page_icon="🗺", layout="wide")
@@ -43,7 +44,7 @@ def styled_metric(label, value, delta=None):
 
 
 st.title("🗺 Location Dashboard")
-st.caption(f"อัพเดทล่าสุด: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+st.caption(f"อัพเดทล่าสุด: {th_str()}")
 
 if not can_access(DATASETS.get("location_monthly", {})):
     st.warning("ยังไม่มีสิทธิ์เข้าถึง"); st.stop()

@@ -11,6 +11,7 @@ from config import DATASETS
 from auth import require_login, can_access
 from datasets import load_dataset
 from usage_log import log_event
+from time_utils import th_str
 
 
 st.set_page_config(page_title="Dashboard — Wanwanach", page_icon="📊", layout="wide")
@@ -70,7 +71,7 @@ def styled_metric(label, value, delta=None, delta_prefix="", help=None):
 
 
 st.title("📊 Executive Dashboard")
-st.caption(f"อัพเดทล่าสุด: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+st.caption(f"อัพเดทล่าสุด: {th_str()}")
 
 # ⭐ Memory-safe: cap max range (Streamlit Free tier = 1 GB RAM)
 _MAX_MONTHS = 48  # 4 ปี max
