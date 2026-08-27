@@ -9,38 +9,13 @@ from auth import require_login, can_access
 from datasets import load_dataset
 from usage_log import log_event
 from time_utils import th_str
+from ui_helpers import COLORS, fmt_num, safe_div, styled_metric
 
 
 st.set_page_config(page_title="Locations — Wanwanach", page_icon="🗺", layout="wide")
 require_login()
 
-COLORS = {"primary": "#1976D2", "success": "#4CAF50", "danger": "#EF5350", "muted": "#78909C"}
-
-
-def fmt_num(v, unit=""):
-    if pd.isna(v) or v == 0:
-        return "0" + unit
-    for suffix, div in [("B", 1e9), ("M", 1e6), ("K", 1e3)]:
-        if abs(v) >= div:
-            return f"{v/div:,.2f}{suffix}{unit}"
-    return f"{v:,.0f}{unit}"
-
-
-def styled_metric(label, value, delta=None):
-    delta_html = ""
-    if delta is not None:
-        color = COLORS["success"] if delta >= 0 else COLORS["danger"]
-        arrow = "▲" if delta >= 0 else "▼"
-        delta_html = f'<div style="color:{color};font-size:14px;margin-top:4px;">{arrow} {abs(delta):.1f}%</div>'
-    html = (
-        f'<div style="padding:16px;background:linear-gradient(135deg,#F5F7FA 0%,#E8EAF6 100%);'
-        f'border-left:4px solid {COLORS["primary"]};border-radius:8px;height:100%;">'
-        f'<div style="color:{COLORS["muted"]};font-size:13px;text-transform:uppercase;letter-spacing:0.5px;">{label}</div>'
-        f'<div style="color:{COLORS["primary"]};font-size:24px;font-weight:700;margin-top:4px;">{value}</div>'
-        f'{delta_html}'
-        f'</div>'
-    )
-    st.markdown(html, unsafe_allow_html=True)
+# COLORS + fmt_num + styled_metric imported from ui_helpers
 
 
 st.title("🗺 Location Dashboard")
@@ -113,7 +88,9 @@ if len(current) == 0:
 # ═══════════════════════════════════════════════════════════
 cur_rev = current["revenue"].sum()
 prev_rev = previous["revenue"].sum() if len(previous) else 0
-rev_pct = ((cur_rev - prev_rev) / prev_rev * 100) if prev_rev else 0
+# ⭐ Only show % if previous window is complete (else misleading)
+_full_prev = prev_end_idx >= 0 and (prev_end_idx - prev_start_idx + 1) == n_months
+rev_pct = safe_div(cur_rev - prev_rev, prev_rev, 0) * 100 if _full_prev else None
 
 cur_provs = current["province"].nunique() if "province" in current.columns else 0
 cur_branches = current["branch_code"].nunique() if "branch_code" in current.columns else 0

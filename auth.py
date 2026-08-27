@@ -1,9 +1,19 @@
-"""Authentication + session management."""
-import streamlit as st
-import bcrypt
+"""Authentication + session management — hardened."""
+import html as _html
 import secrets
-from datetime import datetime
+import time
+
+import bcrypt
+import streamlit as st
+
 import users_store
+from time_utils import th_now
+from usage_log import log_event
+
+
+# ─── Rate-limit config ──────────────────────────────────
+MAX_FAILED_ATTEMPTS = 5
+LOCKOUT_SECONDS = 60 * 15  # 15 minutes
 
 
 def hash_password(plain: str) -> str:
@@ -18,24 +28,53 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
+def _get_rl_state() -> dict:
+    """Rate-limit state kept in session_state."""
+    if "_rl" not in st.session_state:
+        st.session_state["_rl"] = {"fails": 0, "lock_until": 0.0}
+    return st.session_state["_rl"]
+
+
+def _is_locked() -> tuple[bool, int]:
+    """Return (is_locked, seconds_remaining)."""
+    rl = _get_rl_state()
+    remaining = int(rl["lock_until"] - time.time())
+    return remaining > 0, max(0, remaining)
+
+
 def login(username: str, password: str) -> bool:
-    """Try login. Return True if success."""
+    """Try login. Returns True if success. Rate-limits after N fails."""
+    rl = _get_rl_state()
+    locked, _ = _is_locked()
+    if locked:
+        return False
+
     user = users_store.get_user(username)
-    if not user:
+    ok = bool(user) and verify_password(password, user["password_hash"])
+
+    if not ok:
+        rl["fails"] += 1
+        if rl["fails"] >= MAX_FAILED_ATTEMPTS:
+            rl["lock_until"] = time.time() + LOCKOUT_SECONDS
+            log_event("login_locked", meta={"username": username[:32]})
+        else:
+            log_event("login_failed", meta={"username": username[:32]})
         return False
-    if not verify_password(password, user["password_hash"]):
-        return False
-    # Store in session
+
+    # Success — reset RL, set session
+    rl["fails"] = 0
+    rl["lock_until"] = 0.0
     st.session_state["logged_in"] = True
     st.session_state["username"] = username
     st.session_state["user"] = user
-    st.session_state["login_time"] = datetime.now().isoformat()
+    st.session_state["login_time"] = th_now().isoformat()
+    log_event("login", meta={"username": username})
     return True
 
 
 def logout():
-    for k in ["logged_in", "username", "user", "login_time"]:
-        st.session_state.pop(k, None)
+    """Clear all session state — including filters + caches."""
+    st.session_state.clear()
 
 
 def is_logged_in() -> bool:
@@ -54,6 +93,11 @@ def can_access(dataset_conf: dict) -> bool:
     return current_role() in dataset_conf.get("allowed_roles", [])
 
 
+def safe_html(s: str) -> str:
+    """Escape user-controlled strings before injecting into HTML markdown."""
+    return _html.escape(str(s or ""))
+
+
 def require_login():
     """Call at top of every page. Redirect to login if not logged in."""
     if not is_logged_in():
@@ -62,23 +106,34 @@ def require_login():
 
 
 def show_login_page():
-    """Render login form."""
+    """Render login form with rate-limit indicator."""
     st.title("🔐 เข้าสู่ระบบ / Sign in")
     st.caption("Wanwanach Data Hub — ฐานข้อมูลกลางยอดขาย")
+
+    locked, remaining = _is_locked()
+    if locked:
+        m, s = divmod(remaining, 60)
+        st.error(f"🚫 ล็อคชั่วคราวจากการ login ผิดหลายครั้ง — รอ {m}:{s:02d} นาที")
+        return
 
     with st.form("login_form"):
         col1, col2 = st.columns([2, 1])
         with col1:
-            username = st.text_input("👤 Username", placeholder="username")
-            password = st.text_input("🔑 Password", type="password")
+            username = st.text_input("👤 Username", placeholder="username", max_chars=64)
+            password = st.text_input("🔑 Password", type="password", max_chars=128)
         submitted = st.form_submit_button("เข้าสู่ระบบ", type="primary", use_container_width=True)
 
     if submitted:
         if login(username, password):
-            st.success(f"✅ ยินดีต้อนรับ {current_user().get('name', username)}")
+            st.success(f"✅ ยินดีต้อนรับ {safe_html(current_user().get('name', username))}")
             st.rerun()
         else:
-            st.error("❌ Username หรือ Password ไม่ถูกต้อง")
+            rl = _get_rl_state()
+            attempts_left = max(0, MAX_FAILED_ATTEMPTS - rl["fails"])
+            if attempts_left > 0:
+                st.error(f"❌ Username หรือ Password ไม่ถูกต้อง — เหลืออีก {attempts_left} ครั้ง")
+            else:
+                st.error("🚫 ล็อคชั่วคราว 15 นาที")
 
     with st.expander("ℹ️ ต้องการ Account?"):
         st.info(

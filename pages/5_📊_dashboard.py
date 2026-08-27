@@ -12,62 +12,13 @@ from auth import require_login, can_access
 from datasets import load_dataset
 from usage_log import log_event
 from time_utils import th_str
+from ui_helpers import COLORS, CHANNEL_COLORS, SOURCE_COLORS, fmt_num, safe_div, styled_metric
 
 
 st.set_page_config(page_title="Dashboard — Wanwanach", page_icon="📊", layout="wide")
 require_login()
 
-# ─── Theme constants ───
-COLORS = {
-    "primary":   "#1976D2",
-    "accent":    "#42A5F5",
-    "success":   "#4CAF50",
-    "warning":   "#FFA726",
-    "danger":    "#EF5350",
-    "muted":     "#78909C",
-}
-CHANNEL_COLORS = {
-    "Telesale":    "#1976D2",
-    "ModernTrade": "#EF5350",
-    "Booth":       "#4CAF50",
-    "Online":      "#FFA726",
-}
-SOURCE_COLORS = {
-    "amazon":         "#EF5350",
-    "credit":         "#1976D2",
-    "credit_note":    "#78909C",
-    "cash":           "#4CAF50",
-    "booth":          "#FFA726",
-    "online_product": "#AB47BC",
-}
-
-
-def fmt_num(v, unit=""):
-    """Format 1_234_567 → 1.2M"""
-    if pd.isna(v) or v == 0:
-        return "0" + unit
-    for suffix, div in [("B", 1e9), ("M", 1e6), ("K", 1e3)]:
-        if abs(v) >= div:
-            return f"{v/div:,.2f}{suffix}{unit}"
-    return f"{v:,.0f}{unit}"
-
-
-def styled_metric(label, value, delta=None, delta_prefix="", help=None):
-    """Render a colored metric card."""
-    delta_html = ""
-    if delta is not None:
-        color = COLORS["success"] if delta >= 0 else COLORS["danger"]
-        arrow = "▲" if delta >= 0 else "▼"
-        delta_html = f'<div style="color:{color};font-size:14px;margin-top:4px;">{arrow} {delta_prefix}{abs(delta):.1f}%</div>'
-    html = (
-        f'<div style="padding:16px;background:linear-gradient(135deg,#F5F7FA 0%,#E8EAF6 100%);'
-        f'border-left:4px solid {COLORS["primary"]};border-radius:8px;height:100%;">'
-        f'<div style="color:{COLORS["muted"]};font-size:13px;text-transform:uppercase;letter-spacing:0.5px;">{label}</div>'
-        f'<div style="color:{COLORS["primary"]};font-size:28px;font-weight:700;margin-top:4px;">{value}</div>'
-        f'{delta_html}'
-        f'</div>'
-    )
-    st.markdown(html, unsafe_allow_html=True)
+# Theme + fmt_num + styled_metric imported from ui_helpers (was duplicated 3x)
 
 
 st.title("📊 Executive Dashboard")
@@ -164,44 +115,38 @@ with st.sidebar:
         sel_sources = []
         sel_cats = []
 
-# ─── Apply filters ───
-mask = (df["date"] >= start) & (df["date"] <= end)
-if sel_channels:
-    mask &= df["channel"].astype(str).isin(sel_channels)
-if sel_sources:
-    mask &= df["source"].astype(str).isin(sel_sources)
-if sel_cats and "customer_category" in df.columns:
-    mask &= df["customer_category"].astype(str).isin(sel_cats)
-current = df[mask].copy()
-
-# Previous period (same length, before start)
-period_days = (end - start).days + 1
-prev_start = start - pd.DateOffset(days=period_days)
-prev_end = start - pd.DateOffset(days=1)
-prev_mask = (df["date"] >= prev_start) & (df["date"] <= prev_end)
-if sel_channels:
-    prev_mask &= df["channel"].astype(str).isin(sel_channels)
-if sel_sources:
-    prev_mask &= df["source"].astype(str).isin(sel_sources)
-if sel_cats and "customer_category" in df.columns:
-    prev_mask &= df["customer_category"].astype(str).isin(sel_cats)
-previous = df[prev_mask].copy()
-
-if len(current) == 0:
-    st.warning("ไม่มีข้อมูลในช่วงเวลาที่เลือก")
-    st.stop()
-
-# ⭐ Guard: ถ้าช่วงยาวเกินไป → ตัด (ป้องกัน OOM crash)
+# ⭐ Guard: ตัด range ก่อน filter (ป้องกัน OOM + ให้ previous คำนวณถูกต้อง)
 _n_months = ((end.year - start.year) * 12 + (end.month - start.month) + 1)
 if _n_months > _MAX_MONTHS:
     st.warning(
         f"⚠️ ช่วงเวลาที่เลือก **{_n_months} เดือน** ยาวเกิน limit ({_MAX_MONTHS} เดือน)\n\n"
         f"อาจทำให้ระบบค้าง — ตัดเป็น {_MAX_MONTHS} เดือนล่าสุดอัตโนมัติ"
     )
-    cutoff = end - pd.DateOffset(months=_MAX_MONTHS)
-    current = current[current["date"] >= cutoff].copy()
-    start = cutoff
-    period_days = (end - start).days + 1
+    start = end - pd.DateOffset(months=_MAX_MONTHS)
+
+# ─── Apply filters ───
+def _build_mask(_start, _end):
+    m = (df["date"] >= _start) & (df["date"] <= _end)
+    if sel_channels:
+        m &= df["channel"].astype(str).isin(sel_channels)
+    if sel_sources:
+        m &= df["source"].astype(str).isin(sel_sources)
+    if sel_cats and "customer_category" in df.columns:
+        m &= df["customer_category"].astype(str).isin(sel_cats)
+    return m
+
+
+current = df[_build_mask(start, end)].copy()
+
+# Previous period (same length, before start)
+period_days = (end - start).days + 1
+prev_start = start - pd.DateOffset(days=period_days)
+prev_end = start - pd.DateOffset(days=1)
+previous = df[_build_mask(prev_start, prev_end)].copy()
+
+if len(current) == 0:
+    st.warning("ไม่มีข้อมูลในช่วงเวลาที่เลือก")
+    st.stop()
 
 
 # ═══════════════════════════════════════════════════════════
@@ -213,11 +158,14 @@ rev_pct  = ((cur_rev - prev_rev) / prev_rev * 100) if prev_rev else 0
 
 cur_qty  = current["qty"].sum()
 prev_qty = previous["qty"].sum() if len(previous) else 0
-qty_pct  = ((cur_qty - prev_qty) / prev_qty * 100) if prev_qty else 0
+qty_pct  = safe_div(cur_qty - prev_qty, prev_qty, 0) * 100
 
-cur_txn  = current["n_transactions"].sum() if "n_transactions" in current.columns else len(current)
-prev_txn = previous["n_transactions"].sum() if "n_transactions" in previous.columns and len(previous) else 0
-txn_pct  = ((cur_txn - prev_txn) / prev_txn * 100) if prev_txn else 0
+# ⭐ txn: only compute if column exists (no misleading fallback to row count)
+has_txn = "n_transactions" in current.columns
+if has_txn:
+    cur_txn = current["n_transactions"].sum()
+    prev_txn = previous["n_transactions"].sum() if len(previous) else 0
+    txn_pct = safe_div(cur_txn - prev_txn, prev_txn, 0) * 100
 
 cur_branches  = current["branch_code"].nunique()
 prev_branches = previous["branch_code"].nunique() if len(previous) else 0
@@ -225,14 +173,19 @@ br_delta = cur_branches - prev_branches
 
 c1, c2, c3, c4 = st.columns(4)
 with c1:
-    styled_metric("💰 Revenue", fmt_num(cur_rev, " ฿"), delta=rev_pct)
+    styled_metric("💰 Revenue", fmt_num(cur_rev, " ฿"), delta=safe_div(cur_rev - prev_rev, prev_rev, 0) * 100)
 with c2:
     styled_metric("📦 Quantity", fmt_num(cur_qty), delta=qty_pct)
 with c3:
-    styled_metric("🧾 Transactions", fmt_num(cur_txn), delta=txn_pct)
+    if has_txn:
+        styled_metric("🧾 Transactions", fmt_num(cur_txn), delta=txn_pct)
+    else:
+        styled_metric("🧾 Transactions", "—")
 with c4:
-    styled_metric("🏪 Active Branches", f"{cur_branches:,}",
-                  delta=(br_delta / prev_branches * 100) if prev_branches else 0)
+    styled_metric(
+        "🏪 Active Branches", f"{cur_branches:,}",
+        delta=safe_div(br_delta, prev_branches, 0) * 100,
+    )
 
 st.caption(f"เทียบกับช่วงก่อน: {prev_start.date()} → {prev_end.date()}")
 st.divider()
@@ -383,9 +336,11 @@ with col_l:
         heatmap = pd.DataFrame()
     else:
         hm_df = current[["date", "revenue"]].copy()
-        hm_df["day_name"] = hm_df["date"].dt.day_name()
+        # Thai day names for readability
+        _th_days = {0: "จ.", 1: "อ.", 2: "พ.", 3: "พฤ.", 4: "ศ.", 5: "ส.", 6: "อา."}
+        hm_df["day_name"] = hm_df["date"].dt.dayofweek.map(_th_days)
         hm_df["month"] = hm_df["date"].dt.to_period("M").astype(str)
-        day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        day_order = ["จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส.", "อา."]
 
         heatmap = (hm_df.groupby(["day_name", "month"], as_index=False)["revenue"].sum()
                    .pivot(index="day_name", columns="month", values="revenue")

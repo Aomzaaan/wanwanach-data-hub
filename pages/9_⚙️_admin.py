@@ -139,9 +139,12 @@ with tab_users:
                 st.rerun()
 
             if do_delete:
-                users_store.delete(edit_username)
-                st.success(f"✅ ลบ `{edit_username}` สำเร็จ")
-                st.rerun()
+                actor = st.session_state.get("username", "")
+                if users_store.delete(edit_username, actor=actor):
+                    st.success(f"✅ ลบ `{edit_username}` สำเร็จ")
+                    st.rerun()
+                else:
+                    st.error("❌ ไม่สามารถลบตัวเองได้ — ป้องกัน self-lockout")
 
 
 # ═══════════════════════════════════════════════════════════

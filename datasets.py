@@ -1,13 +1,23 @@
 """Data loading + caching — connect to Cloudflare R2."""
-import streamlit as st
-import pandas as pd
-import boto3
 from io import BytesIO
+
+import boto3
+import pandas as pd
+import streamlit as st
+
 from config import DATASETS, CACHE_TTL_SECONDS
 
 
+# Columns that should stay as string (prevent 10408 → int 10408 shown as 10.4k)
+_FORCE_STR_COLS = {
+    "branch_code", "product_code", "year_month", "customer_category",
+    "channel", "source", "route", "province", "district", "area",
+}
+
+
+@st.cache_resource(show_spinner=False)
 def _r2_client():
-    """Build boto3 client from Streamlit secrets."""
+    """Build boto3 client from Streamlit secrets (cached — 1 client per app)."""
     r2 = st.secrets["r2"]
     return boto3.client(
         "s3",
@@ -18,7 +28,22 @@ def _r2_client():
     )
 
 
-@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner="⏳ กำลังดึงข้อมูล...", max_entries=8)
+def _cast_str_cols(df: pd.DataFrame) -> pd.DataFrame:
+    for c in _FORCE_STR_COLS:
+        if c in df.columns:
+            df[c] = df[c].astype(str)
+    return df
+
+
+def _to_categorical(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert repeated string columns to categorical — saves ~70% RAM."""
+    for c in ["source", "channel", "customer_category", "branch_code", "route", "area", "province"]:
+        if c in df.columns and df[c].dtype == "object":
+            df[c] = df[c].astype("category")
+    return df
+
+
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner="⏳ กำลังดึงข้อมูล...", max_entries=3)
 def load_dataset(dataset_id: str, nrows: int | None = None) -> pd.DataFrame:
     """Load dataset from R2 (cached).
 
@@ -32,35 +57,32 @@ def load_dataset(dataset_id: str, nrows: int | None = None) -> pd.DataFrame:
     key = conf["source_key"]
 
     resp = r2.get_object(Bucket=bucket, Key=key)
-    body = resp["Body"].read()
+    force_str_dtype = {c: str for c in _FORCE_STR_COLS}
 
-    # ⭐ Force string dtype for code-like columns (prevent 10408 → int 10408 → shown as 10.4k)
-    force_str = {
-        "branch_code": str, "product_code": str, "year_month": str,
-        "customer_category": str, "channel": str, "source": str, "route": str,
-        "province": str, "district": str, "area": str,
-    }
     if conf["source_type"] == "r2_csv":
-        df = pd.read_csv(BytesIO(body), encoding="utf-8-sig", dtype=force_str, nrows=nrows)
+        # ⭐ Stream directly from R2 (don't read full into RAM first)
+        df = pd.read_csv(
+            resp["Body"], encoding="utf-8-sig", dtype=force_str_dtype, nrows=nrows,
+        )
     elif conf["source_type"] == "r2_parquet":
+        body = resp["Body"].read()
         df = pd.read_parquet(BytesIO(body))
         if nrows:
             df = df.head(nrows)
-        for c, t in force_str.items():
-            if c in df.columns:
-                df[c] = df[c].astype(str)
+        df = _cast_str_cols(df)
     else:
         raise ValueError(f"Unsupported source_type: {conf['source_type']}")
 
     # Parse date column if exists — handle mixed formats
     date_col = conf.get("date_col")
     if date_col and date_col in df.columns:
-        # format='mixed' handles both '2022-01-01' and '2025-01-01 00:00:00.000'
         try:
             df[date_col] = pd.to_datetime(df[date_col], errors="coerce", format="mixed")
         except (ValueError, TypeError):
             df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
 
+    # ⭐ Convert to categorical BEFORE caching → saves ~70% RAM in cache
+    df = _to_categorical(df)
     return df
 
 
@@ -79,23 +101,23 @@ def dataset_metadata(dataset_id: str) -> dict:
             "available": True,
         }
     except Exception as e:
-        return {"available": False, "error": str(e)}
+        return {"available": False, "error": type(e).__name__}  # don't leak stack
 
 
 def apply_filters(df: pd.DataFrame, filters: dict) -> pd.DataFrame:
-    """Apply user-selected filters to df."""
+    """Apply user-selected filters to df. Returns filtered COPY (never mutates input)."""
+    result = df
     for col, val in filters.items():
         if val is None or val == [] or val == "":
             continue
-        if col not in df.columns:
+        if col not in result.columns:
             continue
         if isinstance(val, list):
-            df = df[df[col].astype(str).isin([str(x) for x in val])]
+            result = result[result[col].astype(str).isin([str(x) for x in val])]
         elif isinstance(val, tuple) and len(val) == 2:
-            # Date range
             start, end = val
-            if pd.api.types.is_datetime64_any_dtype(df[col]):
-                df = df[(df[col] >= pd.Timestamp(start)) & (df[col] <= pd.Timestamp(end))]
+            if pd.api.types.is_datetime64_any_dtype(result[col]):
+                result = result[(result[col] >= pd.Timestamp(start)) & (result[col] <= pd.Timestamp(end))]
         else:
-            df = df[df[col].astype(str) == str(val)]
-    return df
+            result = result[result[col].astype(str) == str(val)]
+    return result.copy() if result is df else result

@@ -5,8 +5,13 @@ import plotly.express as px
 
 from config import DATASETS
 from auth import require_login, can_access
-from datasets import load_dataset, apply_filters
+from datasets import load_dataset, apply_filters, dataset_metadata
 from usage_log import log_event
+
+
+SAMPLE_ROWS = 100_000
+SIZE_WARN_MB = 20
+SIZE_HARD_MB = 100
 
 
 st.set_page_config(page_title="Charts — Wanwanach", page_icon="📈", layout="wide")
@@ -30,19 +35,37 @@ dataset_id = st.selectbox(
     index=default_idx,
 )
 conf = DATASETS[dataset_id]
+
+# ⭐ Pre-flight size check + mode selector (avoid OOM on big datasets)
+meta = dataset_metadata(dataset_id)
+size_mb = meta.get("size_mb", 0) if meta.get("available") else 0
+
+if size_mb > SIZE_HARD_MB:
+    default_mode = 0  # Sample
+elif size_mb > SIZE_WARN_MB:
+    default_mode = 0
+else:
+    default_mode = 1  # Full
+
+load_mode = st.radio(
+    "🎯 โหมด: (ไฟล์ {:.0f} MB)".format(size_mb),
+    ["🌱 Sample ({:,} แถว)".format(SAMPLE_ROWS), "🌍 Full"],
+    index=default_mode,
+    horizontal=True,
+)
+_use_sample = "Sample" in load_mode
+
 try:
-    df = load_dataset(dataset_id)
+    df = load_dataset(dataset_id, nrows=SAMPLE_ROWS if _use_sample else None)
 except Exception as e:
-    err_msg = str(e)
-    if "NoSuchKey" in err_msg or "404" in err_msg:
-        st.error(
-            f"⚠️ ยังไม่มีข้อมูลใน R2 — รัน `push_aggregates_to_r2.ipynb` ก่อน\n\n"
-            f"Key: `{conf['source_key']}`"
-        )
+    if "NoSuchKey" in str(e) or "404" in str(e):
+        st.error(f"⚠️ ยังไม่มีข้อมูลใน R2 — รัน `push_aggregates_to_r2.ipynb` ก่อน")
     else:
-        st.error(f"❌ โหลดไม่สำเร็จ: {e}")
+        st.error(f"❌ โหลดไม่สำเร็จ — โปรดลองใหม่")
     st.stop()
-log_event("view_chart", dataset_id)
+log_event("view_chart", dataset_id, {"mode": "sample" if _use_sample else "full"})
+if _use_sample:
+    st.info(f"🌱 Sample mode: แสดงข้อมูล {SAMPLE_ROWS:,} แถวแรก")
 
 # ─── Chart config ───
 st.sidebar.markdown("### 🎨 กำหนดกราฟ")

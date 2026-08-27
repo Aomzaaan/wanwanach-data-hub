@@ -7,10 +7,19 @@ import streamlit as st
 from datetime import datetime
 
 from config import APP_TITLE, APP_SUBTITLE, DATASETS
-from auth import require_login, current_user, current_role, logout, can_access
+from auth import require_login, current_user, current_role, logout, can_access, safe_html
 from datasets import dataset_metadata
 from usage_log import log_event
 from time_utils import th_now, th_str
+
+
+def _mask_email(email: str) -> str:
+    if not email or "@" not in email:
+        return ""
+    local, domain = email.split("@", 1)
+    if len(local) <= 2:
+        return f"{local[0]}*@{domain}"
+    return f"{local[0]}{'*' * (len(local) - 2)}{local[-1]}@{domain}"
 
 
 st.set_page_config(
@@ -25,9 +34,10 @@ require_login()
 
 # ─── Sidebar ───
 with st.sidebar:
-    st.markdown(f"### 👤 {current_user().get('name', 'User')}")
-    st.caption(f"Role: `{current_role()}`")
-    st.caption(f"📧 {current_user().get('email', '')}")
+    st.markdown(f"### 👤 {safe_html(current_user().get('name', 'User'))}")
+    st.caption(f"Role: `{safe_html(current_role())}`")
+    with st.expander("📧 Email"):
+        st.caption(_mask_email(current_user().get("email", "")))
     if st.button("🚪 ออกจากระบบ", use_container_width=True):
         log_event("logout")
         logout()
@@ -56,7 +66,7 @@ st.caption(APP_SUBTITLE)
 st.markdown(
     f"""
     <div style="background:linear-gradient(90deg,#1976D2,#42A5F5); padding:20px; border-radius:10px; color:white;">
-        <h3 style="margin:0;">👋 ยินดีต้อนรับ, {current_user().get('name', 'User')}!</h3>
+        <h3 style="margin:0;">👋 ยินดีต้อนรับ, {safe_html(current_user().get('name', 'User'))}!</h3>
         <p style="margin:10px 0 0 0; opacity:0.9;">
             เลือก dataset จากด้านล่างเพื่อเริ่มดูข้อมูล กรอง และดาวน์โหลด
         </p>
@@ -108,7 +118,9 @@ c1.caption(f"🕐 {th_str()}")
 c2.caption("🥐 Wanwanach Data Hub v1.0")
 c3.caption("📧 data@wanwanach.com")
 
-# Log the visit
-if "logged_visit" not in st.session_state:
+# Log the visit (throttle 1 per 5 min to avoid spam on rerun)
+import time as _time
+_now = _time.time()
+if _now - st.session_state.get("_last_home_log", 0) > 300:
     log_event("view", "home")
-    st.session_state["logged_visit"] = True
+    st.session_state["_last_home_log"] = _now

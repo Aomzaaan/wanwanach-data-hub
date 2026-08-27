@@ -5,28 +5,39 @@ Wanwanach Data Portal — Configuration
 """
 
 # ─── Users ────────────────────────────────────────────────
-# password_hash สร้างจาก: bcrypt.hashpw(b"password", bcrypt.gensalt()).decode()
-# หรือใช้ /pages/9_admin.py → Generate Hash
+# ⚠️ SEED users ไม่ hardcode ในโค้ดอีกต่อไป — เก็บใน Streamlit Secrets
+# [seed_admin]
+# username      = "admin"
+# password_hash = "$2b$12$..."     # bcrypt hash (สร้างจาก admin panel)
+# name          = "ผู้ดูแลระบบ"
+# email         = "data@wanwanach.com"
+#
+# ถ้า secrets ไม่มี → ระบบสร้าง admin/random_password ครั้งแรก แล้วบังคับเปลี่ยน
 #
 # Roles:
 #   admin    — ดูทุก dataset + จัดการ users + ดู usage log
 #   internal — ดูทุก dataset (raw + aggregated)
 #   external — ดูเฉพาะ aggregated (2025+)
-USERS = {
-    "admin": {
-        "password_hash": "$2b$12$FbLOtZ79wBZ0qPr2DAOwnuVgocX2XliYIohPA2K3KSik8e.bxPLgm",  # "REDACTED"
-        "name": "ผู้ดูแลระบบ",
-        "role": "admin",
-        "email": "data@wanwanach.com",
-    },
-    "wanwan": {
-        "password_hash": "$2b$12$z10b15DO6nNZ6k2CkS/o4e9uWN0WtraHXEFpnE9Ty/9rMUNJ0l4Wm",  # "REDACTED"
-        "name": "พี่วี",
-        "role": "internal",
-        "email": "wanwan@wanwanach.com",
-    },
-    # เพิ่ม user ที่นี่
-}
+def _load_seed_users():
+    """Load seed users from Streamlit secrets (fallback: empty)."""
+    try:
+        import streamlit as st
+        seed = st.secrets.get("seed_admin", None)
+        if seed:
+            return {
+                seed["username"]: {
+                    "password_hash": seed["password_hash"],
+                    "name": seed.get("name", "Admin"),
+                    "role": "admin",
+                    "email": seed.get("email", ""),
+                }
+            }
+    except Exception:
+        pass
+    return {}
+
+
+USERS = _load_seed_users()
 
 
 # ─── Datasets ─────────────────────────────────────────────

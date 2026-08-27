@@ -10,38 +10,13 @@ from auth import require_login, can_access
 from datasets import load_dataset
 from usage_log import log_event
 from time_utils import th_str
+from ui_helpers import COLORS, fmt_num, safe_div, styled_metric
 
 
 st.set_page_config(page_title="Products — Wanwanach", page_icon="🥐", layout="wide")
 require_login()
 
-COLORS = {"primary": "#1976D2", "success": "#4CAF50", "danger": "#EF5350", "muted": "#78909C"}
-
-
-def fmt_num(v, unit=""):
-    if pd.isna(v) or v == 0:
-        return "0" + unit
-    for suffix, div in [("B", 1e9), ("M", 1e6), ("K", 1e3)]:
-        if abs(v) >= div:
-            return f"{v/div:,.2f}{suffix}{unit}"
-    return f"{v:,.0f}{unit}"
-
-
-def styled_metric(label, value, delta=None):
-    delta_html = ""
-    if delta is not None:
-        color = COLORS["success"] if delta >= 0 else COLORS["danger"]
-        arrow = "▲" if delta >= 0 else "▼"
-        delta_html = f'<div style="color:{color};font-size:14px;margin-top:4px;">{arrow} {abs(delta):.1f}%</div>'
-    html = (
-        f'<div style="padding:16px;background:linear-gradient(135deg,#F5F7FA 0%,#E8EAF6 100%);'
-        f'border-left:4px solid {COLORS["primary"]};border-radius:8px;height:100%;">'
-        f'<div style="color:{COLORS["muted"]};font-size:13px;text-transform:uppercase;letter-spacing:0.5px;">{label}</div>'
-        f'<div style="color:{COLORS["primary"]};font-size:24px;font-weight:700;margin-top:4px;">{value}</div>'
-        f'{delta_html}'
-        f'</div>'
-    )
-    st.markdown(html, unsafe_allow_html=True)
+# COLORS + fmt_num + styled_metric imported from ui_helpers
 
 
 st.title("🥐 Product Dashboard")
@@ -130,17 +105,19 @@ cur_qty = current["qty"].sum()
 cur_products = current["product_code"].nunique()
 prev_rev = previous["revenue"].sum() if len(previous) else 0
 
-rev_pct = ((cur_rev - prev_rev) / prev_rev * 100) if prev_rev else 0
+# ⭐ Full-window guard: don't show misleading % if previous is partial
+_full_prev = prev_end_idx >= 0 and (prev_end_idx - prev_start_idx + 1) == n_months
+rev_delta = safe_div(cur_rev - prev_rev, prev_rev, 0) * 100 if _full_prev else None
 
 c1, c2, c3, c4 = st.columns(4)
 with c1:
-    styled_metric("💰 Revenue", fmt_num(cur_rev, " ฿"), delta=rev_pct)
+    styled_metric("💰 Revenue", fmt_num(cur_rev, " ฿"), delta=rev_delta)
 with c2:
     styled_metric("📦 Units Sold", fmt_num(cur_qty))
 with c3:
     styled_metric("🥐 Unique SKUs", f"{cur_products:,}")
 with c4:
-    avg_ppu = (cur_rev / cur_qty) if cur_qty else 0
+    avg_ppu = safe_div(cur_rev, cur_qty, 0)
     styled_metric("💵 Avg Price/Unit", fmt_num(avg_ppu, " ฿"))
 
 st.divider()
@@ -148,7 +125,7 @@ st.divider()
 # ═══════════════════════════════════════════════════════════
 # 📊 Rank Products (Top / Bottom / Both)
 # ═══════════════════════════════════════════════════════════
-def _rank_chart(ranked_df, title, color):
+def _rank_chart(ranked_df, color):
     """Reusable horizontal bar chart for ranked products."""
     ranked_df = ranked_df.copy()
     ranked_df["label"] = (
@@ -190,22 +167,22 @@ if rank_mode == "Both":
     with col_l:
         st.markdown(f"### 🏆 Top {top_n} — ขายดี")
         if len(top_prod) > 0:
-            st.plotly_chart(_rank_chart(top_prod, "Top", COLORS["success"]), use_container_width=True)
+            st.plotly_chart(_rank_chart(top_prod, COLORS["success"]), use_container_width=True)
     with col_r:
         st.markdown(f"### 📉 Bottom {top_n} — ขายไม่ดี")
         if len(bottom_prod) > 0:
-            st.plotly_chart(_rank_chart(bottom_prod, "Bottom", COLORS["danger"]), use_container_width=True)
+            st.plotly_chart(_rank_chart(bottom_prod, COLORS["danger"]), use_container_width=True)
 else:
     col_l, col_r = st.columns([1, 1])
     with col_l:
         if show_top:
             st.markdown(f"### 🏆 Top {top_n} Products by Revenue")
             if len(top_prod) > 0:
-                st.plotly_chart(_rank_chart(top_prod, "Top", COLORS["primary"]), use_container_width=True)
+                st.plotly_chart(_rank_chart(top_prod, COLORS["primary"]), use_container_width=True)
         else:
             st.markdown(f"### 📉 Bottom {top_n} Products by Revenue")
             if len(bottom_prod) > 0:
-                st.plotly_chart(_rank_chart(bottom_prod, "Bottom", COLORS["danger"]), use_container_width=True)
+                st.plotly_chart(_rank_chart(bottom_prod, COLORS["danger"]), use_container_width=True)
 
     with col_r:
         # ⭐ Trend limit — cap at 10 lines (readable)
@@ -273,7 +250,9 @@ prod_search = st.text_input("🔍 ค้นหาสินค้า (ชื่�
 
 all_prod = (current.groupby(["product_code", "product_name"], as_index=False)
             .agg(revenue=("revenue", "sum"), qty=("qty", "sum")))
-all_prod["avg_price"] = (all_prod["revenue"] / all_prod["qty"]).round(2)
+# ⭐ Avoid inf when qty=0
+_qty_safe = all_prod["qty"].replace(0, pd.NA)
+all_prod["avg_price"] = (all_prod["revenue"] / _qty_safe).round(2)
 if prod_search:
     all_prod = all_prod[
         all_prod["product_code"].astype(str).str.contains(prod_search, case=False, na=False) |
