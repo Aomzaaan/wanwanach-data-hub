@@ -1,10 +1,17 @@
-"""Admin — user management, usage logs, hash generator."""
-import streamlit as st
-import pandas as pd
+"""Admin — usage logs + email/role reference.
 
-from auth import require_login, current_role, hash_password
+Note (Option B — Google auto-login):
+  User management is now handled at Streamlit Cloud Settings → Sharing.
+  Role mapping is defined in config.py → EMAIL_ROLE_MAPPING.
+  This page is read-only for admin insights (logs + current mapping).
+"""
+import pandas as pd
+import streamlit as st
+
+from auth import require_login, current_role
+from config import EMAIL_ROLE_MAPPING
 from usage_log import read_logs
-import users_store
+from time_utils import th_str
 
 
 st.set_page_config(page_title="Admin — Wanwanach", page_icon="⚙️", layout="wide")
@@ -16,172 +23,87 @@ if current_role() != "admin":
 
 st.title("⚙️ Admin Panel")
 
-tab_users, tab_logs, tab_hash = st.tabs(["👥 Users", "📊 Usage Logs", "🔧 Password Hash"])
+tab_users, tab_logs = st.tabs(["👥 Access Control", "📊 Usage Logs"])
 
 
 # ═══════════════════════════════════════════════════════════
-# 👥 Users
+# 👥 Access Control (read-only reference)
 # ═══════════════════════════════════════════════════════════
 with tab_users:
-    ROLES = ["admin", "internal", "external"]
-    ROLE_DESC = {
-        "admin":    "ดูทุก dataset + จัดการระบบ",
-        "internal": "ดูทุก dataset (raw + aggregated)",
-        "external": "ดูเฉพาะ aggregated (2025+)",
-    }
+    st.markdown("### 🔐 Access Control")
+    st.info(
+        "**Option B — Google-based auto-login**\n\n"
+        "การเพิ่ม/ลบ users ทำที่ 2 จุด:\n\n"
+        "1. **Streamlit Cloud Settings → Sharing** — invite email → ให้ user login Google ได้\n"
+        "2. **config.py → EMAIL_ROLE_MAPPING** — กำหนด role (admin/internal/external)"
+    )
 
-    users = users_store.get_all()
-    current_username = st.session_state.get("username", "")
-
-    # ─── Current users table ───
-    st.markdown("### 📋 รายชื่อผู้ใช้ทั้งหมด")
+    st.markdown("#### 📋 Email → Role mapping (จาก config.py)")
     df = pd.DataFrame([
-        {
-            "username": u,
-            "name":  info.get("name", ""),
-            "role":  info.get("role", ""),
-            "email": info.get("email", ""),
-        }
-        for u, info in users.items()
+        {"pattern": pat, "role": role or "❌ deny"}
+        for pat, role in EMAIL_ROLE_MAPPING.items()
     ])
     st.dataframe(df, use_container_width=True, hide_index=True)
 
-    # ─── Add new user ───
     st.divider()
-    st.markdown("### ➕ เพิ่ม User ใหม่")
-    with st.form("add_user", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        with c1:
-            new_username = st.text_input("Username (ไม่มีช่องว่าง)", placeholder="e.g. somchai")
-            new_name     = st.text_input("ชื่อ-นามสกุล", placeholder="e.g. คุณสมชาย")
-            new_email    = st.text_input("Email")
-        with c2:
-            new_role     = st.selectbox("Role", ROLES, format_func=lambda r: f"{r} — {ROLE_DESC[r]}")
-            new_password = st.text_input("Password (ตั้งครั้งแรก)", type="password")
-            new_password2 = st.text_input("Password (ยืนยัน)", type="password")
-        submitted = st.form_submit_button("➕ เพิ่ม User", type="primary")
-
-    if submitted:
-        errors = []
-        if not new_username or " " in new_username:
-            errors.append("Username ห้ามว่าง/มีช่องว่าง")
-        if new_username in users:
-            errors.append(f"Username `{new_username}` มีอยู่แล้ว")
-        if not new_name:
-            errors.append("ชื่อว่าง")
-        if not new_password:
-            errors.append("Password ว่าง")
-        if new_password != new_password2:
-            errors.append("Password 2 ครั้งไม่ตรงกัน")
-        if len(new_password) < 6:
-            errors.append("Password ต้องยาว ≥ 6 ตัว")
-
-        if errors:
-            for e in errors:
-                st.error(f"❌ {e}")
-        else:
-            users_store.add_or_update(new_username, {
-                "password_hash": hash_password(new_password),
-                "name": new_name,
-                "role": new_role,
-                "email": new_email or "",
-            })
-            st.success(f"✅ เพิ่ม `{new_username}` สำเร็จ")
-            st.rerun()
-
-    # ─── Edit / Delete existing users ───
-    st.divider()
-    st.markdown("### ✏️ แก้ไข / ลบ User")
-
-    edit_username = st.selectbox(
-        "เลือก User ที่จะแก้ไข:",
-        options=[""] + [u for u in users.keys() if u != current_username],
-        help="ไม่สามารถแก้/ลบ user ของตัวเองที่กำลัง login ได้",
+    st.markdown("#### ➕ เพิ่ม user ใหม่")
+    st.markdown(
+        "1. **Streamlit Cloud** → Settings → Sharing → เพิ่ม email\n"
+        "2. ถ้าอยาก role พิเศษ (นอกจาก `@wanwanach.com` = internal):\n"
+        "   - แก้ `config.py` → `EMAIL_ROLE_MAPPING` → เพิ่ม `\"user@wanwanach.com\": \"admin\"`\n"
+        "   - `git push` → รอ Streamlit redeploy"
     )
-
-    if edit_username:
-        u_info = users[edit_username]
-        with st.container(border=True):
-            st.markdown(f"#### 👤 `{edit_username}`")
-
-            with st.form(f"edit_{edit_username}"):
-                c1, c2 = st.columns(2)
-                with c1:
-                    e_name  = st.text_input("ชื่อ", value=u_info.get("name", ""))
-                    e_email = st.text_input("Email", value=u_info.get("email", ""))
-                with c2:
-                    e_role = st.selectbox(
-                        "Role",
-                        ROLES,
-                        index=ROLES.index(u_info.get("role", "external")) if u_info.get("role") in ROLES else 2,
-                        format_func=lambda r: f"{r} — {ROLE_DESC[r]}",
-                    )
-                    st.markdown("**Reset Password** (เว้นว่างถ้าไม่เปลี่ยน)")
-                    e_new_pw = st.text_input("Password ใหม่", type="password", key=f"pw_{edit_username}")
-
-                b1, b2 = st.columns([1, 1])
-                do_save = b1.form_submit_button("💾 บันทึกการแก้ไข", type="primary", use_container_width=True)
-                do_delete = b2.form_submit_button("🗑 ลบ User นี้", use_container_width=True)
-
-            if do_save:
-                updated = {
-                    "password_hash": (
-                        hash_password(e_new_pw) if e_new_pw
-                        else u_info["password_hash"]
-                    ),
-                    "name": e_name,
-                    "role": e_role,
-                    "email": e_email or "",
-                }
-                users_store.add_or_update(edit_username, updated)
-                pw_msg = " + reset password" if e_new_pw else ""
-                st.success(f"✅ อัพเดท `{edit_username}` สำเร็จ{pw_msg}")
-                st.rerun()
-
-            if do_delete:
-                actor = st.session_state.get("username", "")
-                if users_store.delete(edit_username, actor=actor):
-                    st.success(f"✅ ลบ `{edit_username}` สำเร็จ")
-                    st.rerun()
-                else:
-                    st.error("❌ ไม่สามารถลบตัวเองได้ — ป้องกัน self-lockout")
 
 
 # ═══════════════════════════════════════════════════════════
 # 📊 Usage Logs
 # ═══════════════════════════════════════════════════════════
 with tab_logs:
-    st.markdown("### 📊 Usage Log (500 latest)")
-    logs = read_logs(500)
+    st.markdown("### 📊 Recent Activity")
+
+    max_rows = st.slider("จำนวน log ล่าสุด", 50, 1000, 200, step=50)
+    logs = read_logs(limit=max_rows)
+
     if not logs:
         st.info("ยังไม่มี log")
     else:
         df = pd.DataFrame(logs)
-        st.dataframe(df, use_container_width=True, hide_index=True, height=400)
+        # Convert ISO ts → BKK display
+        if "ts" in df.columns:
+            df["ts_bkk"] = pd.to_datetime(df["ts"], errors="coerce")
+            df = df[["ts_bkk", "event", "user", "role", "dataset", "meta"]]
 
-        st.markdown("#### 📈 สรุป")
         c1, c2, c3 = st.columns(3)
-        c1.metric("Total events", len(df))
-        c2.metric("Unique users", df["user"].nunique())
-        c3.metric("Downloads", (df["event"] == "download").sum())
+        c1.metric("รวม events", f"{len(df):,}")
+        c2.metric("Unique users", f"{df['user'].nunique():,}")
+        if "event" in df.columns:
+            c3.metric("Login events", f"{(df['event'] == 'login').sum():,}")
 
-        st.markdown("#### กิจกรรมแต่ละ user")
-        st.dataframe(
-            df.groupby(["user", "event"]).size().unstack(fill_value=0),
-            use_container_width=True,
-        )
+        # Filters
+        with st.expander("🎛 กรอง"):
+            events = sorted(df["event"].dropna().unique().tolist())
+            sel_events = st.multiselect("Event type", events, default=[])
+            users = sorted(df["user"].dropna().unique().tolist())
+            sel_users = st.multiselect("User", users, default=[])
 
+            if sel_events:
+                df = df[df["event"].isin(sel_events)]
+            if sel_users:
+                df = df[df["user"].isin(sel_users)]
 
-# ═══════════════════════════════════════════════════════════
-# 🔧 Password Hash
-# ═══════════════════════════════════════════════════════════
-with tab_hash:
-    st.markdown("### 🔐 Generate Password Hash")
-    st.caption("สำหรับกรณีต้องแก้ `config.py` ตรงๆ (เช่น seed initial admin)")
-    with st.form("hash_form"):
-        pw = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Generate Hash")
-    if submitted and pw:
-        h = hash_password(pw)
-        st.code(h)
-        st.caption("💡 สำหรับ user ใหม่ ใช้ tab 👥 Users จะสะดวกกว่า")
+        st.dataframe(df, use_container_width=True, hide_index=True, height=500)
+
+        # ⭐ Timeline chart
+        if "ts_bkk" in df.columns and len(df) > 0:
+            import plotly.express as px
+            df["date"] = df["ts_bkk"].dt.date
+            daily = df.groupby(["date", "event"], as_index=False).size()
+            fig = px.bar(
+                daily, x="date", y="size", color="event",
+                title="กิจกรรมรายวัน",
+                labels={"size": "จำนวน events"},
+            )
+            fig.update_layout(height=300, margin=dict(l=20, r=20, t=40, b=20))
+            st.plotly_chart(fig, use_container_width=True)
+
+    st.caption(f"อัพเดทล่าสุด: {th_str()}")

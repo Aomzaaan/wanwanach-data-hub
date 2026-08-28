@@ -22,6 +22,12 @@ def _mask_email(email: str) -> str:
     return f"{local[0]}{'*' * (len(local) - 2)}{local[-1]}@{domain}"
 
 
+LOGOUT_HINT = (
+    "หมายเหตุ: การกดออกจากระบบจะเคลียร์เฉพาะ session ใน Portal — "
+    "หากต้องการออกจาก Google ด้วย ให้ signout ที่ https://accounts.google.com"
+)
+
+
 st.set_page_config(
     page_title="Wanwanach Data Hub",
     page_icon="🥐",
@@ -38,7 +44,7 @@ with st.sidebar:
     st.caption(f"Role: `{safe_html(current_role())}`")
     with st.expander("📧 Email"):
         st.caption(_mask_email(current_user().get("email", "")))
-    if st.button("🚪 ออกจากระบบ", use_container_width=True):
+    if st.button("🚪 ออกจากระบบ", use_container_width=True, help=LOGOUT_HINT):
         log_event("logout")
         logout()
         st.rerun()
