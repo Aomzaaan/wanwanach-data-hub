@@ -151,7 +151,7 @@ def _rank_chart(ranked_df, color):
 
 
 # Group once for both Top and Bottom
-all_products = (current.groupby(["product_code", "product_name"], as_index=False)
+all_products = (current.groupby(["product_code", "product_name"], as_index=False, observed=True)
                 .agg(revenue=("revenue", "sum"), qty=("qty", "sum")))
 # Filter out products with 0 revenue (they're noise for Bottom)
 all_products = all_products[all_products["revenue"] > 0]
@@ -193,7 +193,7 @@ else:
         top_codes = trend_source.head(trend_n)["product_code"].tolist() if len(trend_source) else []
         if top_codes:
             trend = current[current["product_code"].isin(top_codes)]
-            trend_pv = (trend.groupby([date_col, "product_code", "product_name"], as_index=False)["revenue"].sum())
+            trend_pv = (trend.groupby([date_col, "product_code", "product_name"], as_index=False, observed=True)["revenue"].sum())
             trend_pv["label"] = trend_pv["product_name"].astype(str).str[:18] + " (" + trend_pv["product_code"].astype(str) + ")"
 
             fig = px.line(
@@ -224,7 +224,7 @@ else:
 # ═══════════════════════════════════════════════════════════
 if "channel" in current.columns:
     st.markdown("### 📊 Revenue by Channel (per month)")
-    by_ch = current.groupby([date_col, "channel"], as_index=False)["revenue"].sum()
+    by_ch = current.groupby([date_col, "channel"], as_index=False, observed=True)["revenue"].sum()
     if len(by_ch) > 0:
         fig = px.bar(
             by_ch, x=date_col, y="revenue", color="channel",
@@ -248,10 +248,10 @@ if "channel" in current.columns:
 st.markdown("### 📋 All Products (search + sort)")
 prod_search = st.text_input("🔍 ค้นหาสินค้า (ชื่อ/รหัส)", "")
 
-all_prod = (current.groupby(["product_code", "product_name"], as_index=False)
+all_prod = (current.groupby(["product_code", "product_name"], as_index=False, observed=True)
             .agg(revenue=("revenue", "sum"), qty=("qty", "sum")))
-# ⭐ Avoid inf when qty=0
-_qty_safe = all_prod["qty"].replace(0, pd.NA)
+# ⭐ Avoid inf when qty=0 — use where() to keep numeric dtype (nullable float)
+_qty_safe = all_prod["qty"].where(all_prod["qty"] != 0)
 all_prod["avg_price"] = (all_prod["revenue"] / _qty_safe).round(2)
 if prod_search:
     all_prod = all_prod[

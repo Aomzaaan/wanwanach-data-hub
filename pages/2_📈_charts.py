@@ -142,7 +142,7 @@ def _format_num(v):
 # ─── Aggregate ───
 if x_col and y_col:
     group_cols = [x_col] + ([color_col] if color_col else [])
-    grouped = df.groupby(group_cols, as_index=False)[y_col].agg(agg)
+    grouped = df.groupby(group_cols, as_index=False, observed=True)[y_col].agg(agg)
 
     # Top N by y_col (skip if user wants all X, e.g. for time-series with color)
     if chart_type in ("Bar", "Pie") and not show_all_x:

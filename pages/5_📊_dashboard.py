@@ -207,7 +207,7 @@ with col_l:
         grain, gr_col = "quarter", current["date"].dt.to_period("Q").astype(str)
 
     trend = (current.assign(period=gr_col)
-             .groupby(["period", "channel"], as_index=False)["revenue"].sum())
+             .groupby(["period", "channel"], as_index=False, observed=True)["revenue"].sum())
 
     if len(trend) > 0:
         # ⭐ Stacked bar ทุกช่วง — ตรงกับ Source Breakdown, เห็น total + channel ชัดเจน
@@ -237,7 +237,7 @@ with col_l:
 
 with col_r:
     st.markdown("### 🥧 Channel Mix")
-    mix = current.groupby("channel", as_index=False)["revenue"].sum().sort_values("revenue", ascending=False)
+    mix = current.groupby("channel", as_index=False, observed=True)["revenue"].sum().sort_values("revenue", ascending=False)
     if len(mix) > 0:
         fig = px.pie(
             mix, names="channel", values="revenue",
@@ -269,7 +269,7 @@ col_l, col_r = st.columns(2)
 
 with col_l:
     st.markdown("### 🏆 Top 15 Branches")
-    top_br = (current.groupby("branch_code", as_index=False)["revenue"].sum()
+    top_br = (current.groupby("branch_code", as_index=False, observed=True)["revenue"].sum()
               .nlargest(15, "revenue")).sort_values("revenue")
     if len(top_br) > 0:
         top_br["branch_label"] = top_br["branch_code"].astype(str)
@@ -297,7 +297,7 @@ with col_l:
 with col_r:
     st.markdown("### 📊 Source Breakdown")
     src_month = (current.assign(period=gr_col)
-                 .groupby(["period", "source"], as_index=False)["revenue"].sum())
+                 .groupby(["period", "source"], as_index=False, observed=True)["revenue"].sum())
     if len(src_month) > 0:
         fig = px.bar(
             src_month, x="period", y="revenue", color="source",
@@ -342,7 +342,7 @@ with col_l:
         hm_df["month"] = hm_df["date"].dt.to_period("M").astype(str)
         day_order = ["จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส.", "อา."]
 
-        heatmap = (hm_df.groupby(["day_name", "month"], as_index=False)["revenue"].sum()
+        heatmap = (hm_df.groupby(["day_name", "month"], as_index=False, observed=True)["revenue"].sum()
                    .pivot(index="day_name", columns="month", values="revenue")
                    .reindex(day_order))
         heatmap = heatmap.dropna(how="all").dropna(how="all", axis=1)
@@ -411,7 +411,7 @@ with col_r:
 # 📋 Summary Table
 # ═══════════════════════════════════════════════════════════
 st.markdown("### 📋 Summary by Channel")
-summary = (current.groupby("channel", as_index=False).agg(
+summary = (current.groupby("channel", as_index=False, observed=True).agg(
     revenue=("revenue", "sum"),
     qty=("qty", "sum"),
     branches=("branch_code", "nunique"),

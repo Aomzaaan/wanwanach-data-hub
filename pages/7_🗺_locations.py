@@ -116,7 +116,7 @@ col_l, col_r = st.columns(2)
 with col_l:
     st.markdown("### 🏙 Top 20 Provinces")
     if "province" in current.columns:
-        by_prov = (current.groupby("province", as_index=False)["revenue"].sum()
+        by_prov = (current.groupby("province", as_index=False, observed=True)["revenue"].sum()
                    .nlargest(20, "revenue"))
         if len(by_prov) > 0:
             fig = px.bar(
@@ -139,7 +139,7 @@ with col_l:
 with col_r:
     st.markdown("### 🌏 Revenue by Area")
     if "area" in current.columns:
-        by_area = current.groupby("area", as_index=False)["revenue"].sum().sort_values("revenue", ascending=False)
+        by_area = current.groupby("area", as_index=False, observed=True)["revenue"].sum().sort_values("revenue", ascending=False)
         if len(by_area) > 0:
             fig = px.pie(
                 by_area, names="area", values="revenue",
@@ -164,7 +164,7 @@ with col_l:
     st.markdown("### 🚚 Top 20 Routes")
     if "route" in current.columns:
         by_route = (current[current["route"].notna()]
-                    .groupby("route", as_index=False)["revenue"].sum()
+                    .groupby("route", as_index=False, observed=True)["revenue"].sum()
                     .nlargest(20, "revenue"))
         if len(by_route) > 0:
             fig = px.bar(
@@ -187,7 +187,7 @@ with col_l:
 with col_r:
     st.markdown("### 📈 Trend by Area")
     if "area" in current.columns:
-        by_month_area = current.groupby([date_col, "area"], as_index=False)["revenue"].sum()
+        by_month_area = current.groupby([date_col, "area"], as_index=False, observed=True)["revenue"].sum()
         if len(by_month_area) > 0:
             n_periods = by_month_area[date_col].nunique()
             chart_fn = px.line if n_periods <= 3 else px.area
@@ -212,7 +212,8 @@ with col_r:
 # 📋 Detail table
 # ═══════════════════════════════════════════════════════════
 st.markdown("### 📋 Details by Province × Route")
-grouped = (current.groupby([c for c in ["province", "district", "route"] if c in current.columns], as_index=False, dropna=False)
+grouped = (current.groupby([c for c in ["province", "district", "route"] if c in current.columns],
+                             as_index=False, dropna=False, observed=True)
            .agg(revenue=("revenue", "sum"), qty=("qty", "sum"))
            .sort_values("revenue", ascending=False)
            .head(500))
