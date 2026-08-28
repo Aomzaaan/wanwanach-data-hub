@@ -148,6 +148,21 @@ def _show_no_session():
         "2. Login Google ด้วย email ในบริษัท (@wanwanach.com)\n"
         "3. ถ้ายังเข้าไม่ได้ → ติดต่อ Admin (data@wanwanach.com)"
     )
+    # Debug info (help troubleshoot Streamlit sharing config)
+    with st.expander("🔍 Debug info (สำหรับ Admin)"):
+        st.write("**Streamlit user API check**:")
+        try:
+            u = st.experimental_user
+            st.code(f"st.experimental_user.email = {u.email!r}")
+            st.code(f"st.experimental_user.is_logged_in = {getattr(u, 'is_logged_in', 'N/A')}")
+        except Exception as e:
+            st.code(f"st.experimental_user failed: {type(e).__name__}: {e}")
+        try:
+            u = st.user
+            st.code(f"st.user.email = {u.email!r}")
+        except Exception as e:
+            st.code(f"st.user failed: {type(e).__name__}: {e}")
+        st.caption("ถ้าเห็น email = None ทั้งคู่ → Sharing setting ไม่ใช่ 'Only specific people'")
 
 
 def _show_denied(email: str):
