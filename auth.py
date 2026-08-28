@@ -105,7 +105,7 @@ def logout():
 
 
 def require_login():
-    """Gate every page. Auto-login via Google email, or show local-dev override."""
+    """Gate every page. Requires Google login via Streamlit Cloud."""
     if is_logged_in():
         return
 
@@ -120,10 +120,34 @@ def require_login():
         _autologin(email, role)
         log_event("login", meta={"method": "google", "email": email})
         st.rerun()
-    else:
-        # ⚠️ Fallback path — local dev / public app (no Google session)
+
+    # ⚠️ No Google session detected
+    # Local-dev fallback is only enabled if ALLOW_LOCAL_DEV_LOGIN=1 in secrets
+    try:
+        allow_dev = bool(st.secrets.get("ALLOW_LOCAL_DEV_LOGIN", False))
+    except Exception:
+        allow_dev = False
+
+    if allow_dev:
         _show_local_dev_login()
         st.stop()
+
+    # Production: no fallback, no bypass
+    _show_no_session()
+    st.stop()
+
+
+def _show_no_session():
+    """Shown when Google session not detected on production."""
+    st.title("🔐 กรุณา Login")
+    st.error(
+        "❌ ไม่พบ Google session\n\n"
+        "การเข้าใช้งาน Portal ต้อง login ด้วย Google account ที่ได้รับสิทธิ์เท่านั้น\n\n"
+        "**วิธีเข้าถึง**:\n"
+        "1. ตรวจว่าเข้ามาจาก link แบบ private ที่ Admin ส่งให้\n"
+        "2. Login Google ด้วย email ในบริษัท (@wanwanach.com)\n"
+        "3. ถ้ายังเข้าไม่ได้ → ติดต่อ Admin (data@wanwanach.com)"
+    )
 
 
 def _show_denied(email: str):
