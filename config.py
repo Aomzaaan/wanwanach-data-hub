@@ -40,30 +40,6 @@ def _load_seed_users():
 USERS = _load_seed_users()
 
 
-# ─── Email → Role Mapping (Option B: Auto-login via Google) ──
-# Roles resolved in order:
-#   1. Exact email match (highest priority)
-#   2. @domain match
-#   3. "*" fallback (None = deny)
-#
-# หากอยากเพิ่ม user ใหม่ — ทำ 2 อย่าง:
-#   1. Invite email ที่ Streamlit Cloud Settings → Sharing
-#   2. (ถ้าอยาก role พิเศษ) เพิ่ม email → role ตรงนี้
-#
-# ถ้า role ปกติ (internal) — ไม่ต้องแก้ตรงนี้ ใช้ @wanwanach.com fallback ได้เลย
-EMAIL_ROLE_MAPPING = {
-    # ─── Explicit admins ───
-    "data@wanwanach.com":     "admin",
-
-    # ─── Domain-wide fallback (@wanwanach.com = internal) ───
-    "@wanwanach.com":         "internal",
-    "@wanwanachapp.com":      "internal",
-
-    # ─── Global fallback (email อื่น = deny) ───
-    "*":                      None,
-}
-
-
 # ─── Datasets ─────────────────────────────────────────────
 # แต่ละ dataset:
 #   name        — ชื่อแสดงใน UI
