@@ -105,9 +105,14 @@ try:
         df_all = load_dataset(dataset_id)
         date_col = conf.get("date_col")
         if date_col and date_col in df_all.columns and pd.api.types.is_datetime64_any_dtype(df_all[date_col]):
-            cutoff = df_all[date_col].max() - pd.DateOffset(months=RECENT_MONTHS_DEFAULT)
+            # 12 FULL calendar months (ตรงกับหน้า Dashboard/Products/Locations)
+            # ถ้า max = 2026-09-15 → start = 2025-10-01 (ต้นเดือน) → 12 เดือนเต็ม
+            max_d = df_all[date_col].max()
+            max_month_start = pd.Timestamp(max_d.year, max_d.month, 1)
+            cutoff = max_month_start - pd.DateOffset(months=RECENT_MONTHS_DEFAULT - 1)
             df = df_all[df_all[date_col] >= cutoff].copy()
-            st.info(f"📅 Recent mode: {RECENT_MONTHS_DEFAULT} เดือนล่าสุด ({df[date_col].min().date()} → {df[date_col].max().date()})")
+            n_months = (max_d.year - cutoff.year) * 12 + (max_d.month - cutoff.month) + 1
+            st.info(f"📅 Recent mode: {n_months} เต็มเดือน ({cutoff.date()} → {df[date_col].max().date()}) — ตรงกับ Dashboard")
         else:
             df = df_all
     else:  # full
