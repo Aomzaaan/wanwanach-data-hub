@@ -26,7 +26,7 @@ def _r2():
         region_name=r2.get("region", "auto"))
     return client, r2["bucket"]
 
-@st.cache_data(ttl=1800, show_spinner="⏳ โหลด forecast จาก R2...")
+@st.cache_data(ttl=900, show_spinner="⏳ โหลด forecast จาก R2...")
 def load_csv(name):
     c, bucket = _r2()
     try:
@@ -51,7 +51,10 @@ def add_name(df):
                  d["product_code"].astype(str).map(lambda c: NAME.get(c, "")))
     return d
 
-st.title("📦 วางแผนผลิต — ModernTrade")
+_tcol, _rcol = st.columns([6, 1])
+_tcol.title("📦 วางแผนผลิต — ModernTrade")
+if _rcol.button("🔄 รีเฟรชข้อมูล", use_container_width=True):
+    st.cache_data.clear(); st.rerun()
 if sp is None:
     st.warning("ยังไม่พบข้อมูล forecast บน R2 — รัน push_forecast_to_r2.py จากเครื่องที่ประมวลผลก่อน")
     st.stop()
