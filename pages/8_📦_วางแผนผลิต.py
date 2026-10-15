@@ -41,6 +41,7 @@ rev   = load_csv("review_list.csv")
 drift = load_csv("drift_alerts.csv")
 hist  = load_csv("learning_history.csv")
 names = load_csv("product_names.csv")
+fweek = load_csv("forecast_weekly.csv")   # ใช้หาช่วงวันที่ (คอลัมน์ week)
 NAME  = dict(zip(names["product_code"].astype(str), names["product_name"])) if names is not None else {}
 
 def add_name(df):
@@ -59,6 +60,28 @@ if sp is None:
     st.warning("ยังไม่พบข้อมูล forecast บน R2 — รัน push_forecast_to_r2.py จากเครื่องที่ประมวลผลก่อน")
     st.stop()
 st.caption("ข้อมูลจากโมเดลพยากรณ์ (seasonal-naive, group×product) · อ่านจาก R2 prefix forecast/ · แยกจากข้อมูลยอดขาย")
+
+# ─── แถบช่วงวันที่: ใช้ยอดของสัปดาห์ไหน วางแผนสำหรับสัปดาห์ไหน (คำนวณจากคอลัมน์ week) ───
+_THMON = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."]
+def _d(ts):  return f"{ts.day} {_THMON[ts.month-1]}"
+def _dy(ts): return f"{ts.day} {_THMON[ts.month-1]} {ts.year}"
+def _date_window(fw):
+    try:
+        wks = sorted(pd.to_datetime(fw["week"]).dt.normalize().unique())
+        if not wks: return None
+        ps = pd.Timestamp(wks[0]); pe = pd.Timestamp(wks[-1]) + pd.Timedelta(days=6)
+        bs = ps - pd.Timedelta(days=7); be = ps - pd.Timedelta(days=1)
+        return bs, be, ps, pe, len(wks)
+    except Exception:
+        return None
+_win = _date_window(fweek) if fweek is not None else None
+if _win:
+    _bs,_be,_ps,_pe,_nwk = _win
+    _w1e = _ps + pd.Timedelta(days=6)
+    st.success(
+        f"📅 **ใช้ยอดจริงล่าสุด**: สัปดาห์ {_d(_bs)}–{_dy(_be)} (ข้อมูลครบถึง {_dy(_be)})  →  "
+        f"**วางแผนผลิต {_nwk} สัปดาห์**: {_d(_ps)} – {_dy(_pe)}")
+    st.caption(f"👉 ตัวเลข KPI และตารางด้านล่าง = แผนของ **สัปดาห์ถัดไป ({_d(_ps)}–{_dy(_w1e)})** · อีก {_nwk-1} สัปดาห์เป็นแนวโน้มล่วงหน้าไว้เตรียมวัตถุดิบ/กำลังคน")
 log_event("view_dashboard", "production_forecast")
 
 # ─── KPI ───
