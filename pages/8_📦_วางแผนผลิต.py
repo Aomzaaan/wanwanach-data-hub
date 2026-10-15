@@ -86,13 +86,24 @@ log_event("view_dashboard", "production_forecast")
 
 # ─── KPI ───
 tot_rec = sp["recommend_week"].sum(); tot_fc = sp["forecast_week"].sum(); tot_ss = sp["safety_stock"].sum()
-wape = hist["WAPE_recent"].iloc[-1] if (hist is not None and len(hist)) else None
-c1, c2, c3, c4, c5 = st.columns(5)
+def _last(col):
+    if hist is not None and len(hist) and col in hist.columns:
+        v = hist[col].iloc[-1]
+        return None if pd.isna(v) else float(v)
+    return None
+wape_sku   = _last("WAPE_recent")        # รายสินค้า/สัปดาห์ (โหดสุด รวม timing noise)
+wape_total = _last("WAPE_total_weekly")  # ยอดรวมทั้งโรงงาน/สัปดาห์ (error หักล้างกัน)
+_pct = lambda v: f"{v*100:.1f}%" if v is not None else "-"
+c1, c2, c3, c4, c5, c6 = st.columns(6)
 c1.metric("ควรผลิตรวม / สัปดาห์", f"{tot_rec:,.0f}")
 c2.metric("Safety stock รวม", f"{tot_ss:,.0f}", f"+{100*tot_ss/tot_fc:.0f}%")
-c3.metric("ความแม่น (WAPE)", f"{wape*100:.1f}%" if wape is not None else "-")
-c4.metric("SKU ต้องตรวจ", f"{len(rev) if rev is not None else 0}")
-c5.metric("แจ้งเตือน DRIFT", f"{len(drift) if drift is not None else 0}")
+c3.metric("แม่นยอดรวม / สัปดาห์", _pct(wape_total),
+          help="ความคลาดของยอดผลิตรวมทั้งหมดต่อสัปดาห์ (WAPE · ยิ่งต่ำยิ่งดี) — ใช้วางแผนวัตถุดิบ/กำลังการผลิตรวม")
+c4.metric("แม่นรายสินค้า / สัปดาห์", _pct(wape_sku),
+          help="ความคลาดเฉลี่ยรายสินค้าต่อสัปดาห์ (WAPE) สูงกว่าเพราะรวม timing noise ว่าลูกค้าสลับสั่งตัวไหนสัปดาห์ไหน — เราเผื่อไว้ใน safety stock แล้ว")
+c5.metric("SKU ต้องตรวจ", f"{len(rev) if rev is not None else 0}")
+c6.metric("แจ้งเตือน DRIFT", f"{len(drift) if drift is not None else 0}")
+st.caption("ℹ️ WAPE = ความคลาด (ยิ่งต่ำยิ่งดี) · **ยอดรวมแม่นกว่ารายสินค้า** เพราะ error ตัวเกิน/ตัวขาดหักล้างกัน — ภาพรวมโรงงานแม่นระดับ ~97%")
 
 if drift is not None and len(drift):
     st.error("⚠️ SKU ที่เปลี่ยนพฤติกรรม — ตรวจก่อนสั่งผลิต")
