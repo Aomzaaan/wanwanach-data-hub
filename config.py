@@ -82,6 +82,16 @@ DATASETS = {
         "allowed_roles": ["admin", "internal", "external"],
         "update_freq": "รายเดือน",
     },
+    "amazon_claim_summary": {
+        "name": "♻️ เครม Amazon (Claim Rate)",
+        "description": "claim% ต่อ ร้าน × วันเครม — เตือนเมื่อเกิน 10% ของยอดขาย",
+        "source_type": "r2_csv",
+        "source_key": "aggregated/amazon_claim_summary.csv",
+        "filters": ["branch_code"],
+        "date_col": "claim_date",
+        "allowed_roles": ["admin", "internal"],
+        "update_freq": "รายวัน",
+    },
     # Raw data — 1.1 GB — เก็บไว้ใน R2 แต่ไม่ให้ portal โหลด (จะช้า/hang)
     # ถ้าต้องการ ให้ใช้ signed URL / API key แทน
     # "sales_fact_raw": {
