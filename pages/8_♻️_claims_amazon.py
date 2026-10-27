@@ -69,8 +69,8 @@ st.divider()
 cols = ["claim_date", "branch_code", "n_billing", "sale_amount", "claim_amount", "claim_pct"]
 fmt = {"sale_amount": "{:,.0f}", "claim_amount": "{:,.0f}", "claim_pct": "{:.1f}%"}
 
-# ─── ร้านที่เกินเกณฑ์ ───
-st.subheader(f"⚠️ ร้านที่เครมเกิน {thr:.0f}% ของยอดขาย")
+# ─── ร้านที่เครมเกิน X% (มากกว่า ไม่รวม = X%) ───
+st.subheader(f"⚠️ ร้านที่เครม **เกิน** {thr:.0f}% ของยอดขาย (10% พอดีไม่นับ)")
 over = f[f["เกินเกณฑ์"]].sort_values("claim_pct", ascending=False)
 if over.empty:
     st.success(f"ไม่มีร้านที่เครมเกิน {thr:.0f}% ในช่วงที่เลือก ✅")
@@ -83,27 +83,29 @@ else:
         ),
         use_container_width=True, hide_index=True,
     )
+    st.download_button(
+        f"⬇ ดาวน์โหลดร้านที่เกิน {thr:.0f}% (CSV)",
+        show.to_csv(index=False).encode("utf-8-sig"),
+        "amazon_claim_over.csv", "text/csv",
+    )
 
-# ─── รายการทั้งหมด (ไฮไลต์เกินเกณฑ์) ───
-st.subheader("รายการทั้งหมด")
-allshow = f.sort_values("claim_pct", ascending=False)
-disp = allshow[cols].copy()
-disp["claim_date"] = disp["claim_date"].dt.strftime("%Y-%m-%d")
-over_by_idx = allshow["เกินเกณฑ์"]   # aligned by index with disp
+# ─── รายการทั้งหมด (ซ่อนใน expander — เผื่ออยากดูภาพรวม) ───
+with st.expander("ดูรายการทั้งหมด (รวมร้านที่ไม่เกินเกณฑ์)"):
+    allshow = f.sort_values("claim_pct", ascending=False)
+    disp = allshow[cols].copy()
+    disp["claim_date"] = disp["claim_date"].dt.strftime("%Y-%m-%d")
+    over_by_idx = allshow["เกินเกณฑ์"]   # aligned by index with disp
 
+    def _hl(row):
+        style = "background-color:#ffecec" if bool(over_by_idx.loc[row.name]) else ""
+        return [style] * len(row)
 
-def _hl(row):
-    style = "background-color:#ffecec" if bool(over_by_idx.loc[row.name]) else ""
-    return [style] * len(row)
-
-
-st.dataframe(
-    disp.style.format(fmt).apply(_hl, axis=1),
-    use_container_width=True, hide_index=True,
-)
-
-st.download_button(
-    "⬇ ดาวน์โหลด (CSV)",
-    disp.to_csv(index=False).encode("utf-8-sig"),
-    "amazon_claim_summary.csv", "text/csv",
-)
+    st.dataframe(
+        disp.style.format(fmt).apply(_hl, axis=1),
+        use_container_width=True, hide_index=True,
+    )
+    st.download_button(
+        "⬇ ดาวน์โหลดทั้งหมด (CSV)",
+        disp.to_csv(index=False).encode("utf-8-sig"),
+        "amazon_claim_summary.csv", "text/csv",
+    )
