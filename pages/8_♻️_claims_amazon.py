@@ -32,8 +32,10 @@ if df is None or df.empty:
     st.stop()
 
 # ─── clean types ───
-df["claim_date"] = pd.to_datetime(df["claim_date"], errors="coerce")
-for c in ["sale_amount", "claim_amount", "claim_pct", "n_billing"]:
+for dc in ["claim_date", "delivery_date"]:
+    if dc in df.columns:
+        df[dc] = pd.to_datetime(df[dc], errors="coerce")
+for c in ["sale_amount", "claim_amount", "claim_pct", "days_after"]:
     if c in df.columns:
         df[c] = pd.to_numeric(df[c], errors="coerce")
 df = df.dropna(subset=["claim_date"])
@@ -69,7 +71,7 @@ st.divider()
 cols = [c for c in ["claim_date", "branch_code", "billing_no", "ref",
                      "sale_amount", "claim_amount", "claim_pct"] if c in df.columns]
 RENAME = {
-    "claim_date": "วันเครม", "branch_code": "รหัสสาขา", "billing_no": "Billing No",
+    "claim_date": "วันที่เครม", "branch_code": "รหัสสาขา", "billing_no": "Billing No",
     "ref": "เลขใบเคลม", "sale_amount": "ยอดขาย", "claim_amount": "ยอดเครม", "claim_pct": "claim %",
 }
 fmt = {"ยอดขาย": "{:,.0f}", "ยอดเครม": "{:,.0f}", "claim %": "{:.2f}%"}
@@ -77,7 +79,8 @@ fmt = {"ยอดขาย": "{:,.0f}", "ยอดเครม": "{:,.0f}", "cla
 
 def _prep(d):
     d = d[cols].copy()
-    d["claim_date"] = d["claim_date"].dt.strftime("%Y-%m-%d")
+    if "claim_date" in d.columns:
+        d["claim_date"] = pd.to_datetime(d["claim_date"], errors="coerce").dt.strftime("%Y-%m-%d")
     return d.rename(columns=RENAME)
 
 # ─── ร้านที่เครมเกิน X% (มากกว่า ไม่รวม = X%) ───
