@@ -66,8 +66,19 @@ k4.metric("ยอดเครมรวม", f"{f['claim_amount'].sum():,.0f}")
 
 st.divider()
 
-cols = ["claim_date", "branch_code", "n_billing", "sale_amount", "claim_amount", "claim_pct"]
-fmt = {"sale_amount": "{:,.0f}", "claim_amount": "{:,.0f}", "claim_pct": "{:.1f}%"}
+cols = [c for c in ["claim_date", "branch_code", "billing_no", "ref",
+                     "sale_amount", "claim_amount", "claim_pct"] if c in df.columns]
+RENAME = {
+    "claim_date": "วันเครม", "branch_code": "รหัสสาขา", "billing_no": "Billing No",
+    "ref": "เลขใบเคลม", "sale_amount": "ยอดขาย", "claim_amount": "ยอดเครม", "claim_pct": "claim %",
+}
+fmt = {"ยอดขาย": "{:,.0f}", "ยอดเครม": "{:,.0f}", "claim %": "{:.2f}%"}
+
+
+def _prep(d):
+    d = d[cols].copy()
+    d["claim_date"] = d["claim_date"].dt.strftime("%Y-%m-%d")
+    return d.rename(columns=RENAME)
 
 # ─── ร้านที่เครมเกิน X% (มากกว่า ไม่รวม = X%) ───
 st.subheader(f"⚠️ ร้านที่เครม **เกิน** {thr:.0f}% ของยอดขาย (10% พอดีไม่นับ)")
@@ -75,8 +86,7 @@ over = f[f["เกินเกณฑ์"]].sort_values("claim_pct", ascending=Fa
 if over.empty:
     st.success(f"ไม่มีร้านที่เครมเกิน {thr:.0f}% ในช่วงที่เลือก ✅")
 else:
-    show = over[cols].copy()
-    show["claim_date"] = show["claim_date"].dt.strftime("%Y-%m-%d")
+    show = _prep(over)
     st.dataframe(
         show.style.format(fmt).apply(
             lambda r: ["background-color:#ffd6d6; color:#b00020"] * len(r), axis=1
@@ -92,8 +102,7 @@ else:
 # ─── รายการทั้งหมด (ซ่อนใน expander — เผื่ออยากดูภาพรวม) ───
 with st.expander("ดูรายการทั้งหมด (รวมร้านที่ไม่เกินเกณฑ์)"):
     allshow = f.sort_values("claim_pct", ascending=False)
-    disp = allshow[cols].copy()
-    disp["claim_date"] = disp["claim_date"].dt.strftime("%Y-%m-%d")
+    disp = _prep(allshow)
     over_by_idx = allshow["เกินเกณฑ์"]   # aligned by index with disp
 
     def _hl(row):
