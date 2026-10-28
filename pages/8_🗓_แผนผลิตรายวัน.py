@@ -71,6 +71,20 @@ nx_show=nx[["cust","product_code","name","source","demand","recommend"]].rename(
 st.dataframe(nx_show, hide_index=True, use_container_width=True, height=360)
 st.caption(f"รวมควรผลิตวันนี้ {nx['recommend'].sum():,.0f} ชิ้น · PO {len(nx[nx['source']=='PO'])} / forecast {len(nx[nx['source']=='FC'])} รายการ")
 
+# ─── forecast รอบถัดไป (ยังไม่มี PO — เตรียมล่วงหน้า) ───
+_byd = d.pivot_table(index="prod_date", columns="source", values="recommend", aggfunc="sum", fill_value=0)
+_po = _byd["PO"] if "PO" in _byd.columns else 0
+_fc = _byd["FC"] if "FC" in _byd.columns else 0
+_fcdays = list(_byd.index[_fc > _po])
+if len(_fcdays):
+    fnxt = min(_fcdays)
+    st.subheader(f"🔮 forecast รอบถัดไป (ยังไม่มี PO): ผลิต {dthai(fnxt)} · ส่งถึงลูกค้า {dthai(fnxt+pd.Timedelta(days=2))}")
+    fx = d[d["prod_date"]==fnxt].sort_values("recommend", ascending=False)
+    fx_show = fx[["cust","product_code","name","source","demand","recommend"]].rename(columns={
+        "cust":"ลูกค้า","name":"ชื่อสินค้า","source":"แหล่ง","demand":"ยอดคาด","recommend":"ควรผลิต"})
+    st.dataframe(fx_show, hide_index=True, use_container_width=True, height=320)
+    st.caption(f"ยอด forecast รวม {fx['recommend'].sum():,.0f} ชิ้น · ไว้เตรียมวัตถุดิบ/กำลังคนล่วงหน้า · จะเปลี่ยนเป็น PO จริงเมื่อ PO มาถึง (รันเช้าถัดไป)")
+
 # ─── ตารางเต็ม: ทุกวันผลิตข้างหน้า ───
 st.subheader("📋 แผนล่วงหน้าทั้งหมด (ตาม 'วันผลิต')")
 full=d.copy()
