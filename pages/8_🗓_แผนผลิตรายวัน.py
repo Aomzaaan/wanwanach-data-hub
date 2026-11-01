@@ -58,18 +58,19 @@ elif who=="Big C": d = d[d["cust"]=="BIG C"]
 T=d["demand"].sum(); po=d[d["source"]=="PO"]["demand"].sum(); fc=d[d["source"]=="FC"]["demand"].sum()
 nxt=d["prod_date"].min()
 c1,c2,c3,c4=st.columns(4)
-c1.metric("วันผลิตถัดไป", dthai(nxt))
-c2.metric("ควรผลิตวันถัดไป", f"{d[d['prod_date']==nxt]['recommend'].sum():,.0f}")
+c1.metric("ผลิตพรุ่งนี้", dthai(nxt))
+c2.metric("ควรผลิต (พรุ่งนี้)", f"{d[d['prod_date']==nxt]['recommend'].sum():,.0f}")
 c3.metric("PO จริง (ทั้งช่วง)", f"{100*po/T:.0f}%" if T else "-", help="สัดส่วนยอดที่เป็น PO จริงแล้ว ที่เหลือเป็น forecast")
 c4.metric("รายการทั้งหมด", f"{len(d):,}")
 
 # ─── ไฮไลต์: วันผลิตถัดไป ───
-st.subheader(f"🔥 วันผลิตถัดไป: {dthai(nxt)}  (ส่งถึงลูกค้า {dthai(nxt+pd.Timedelta(days=2))})")
+st.subheader(f"🔥 ผลิต {dthai(nxt)} → ส่ง {dthai(nxt+pd.Timedelta(days=1))} → ถึงลูกค้า {dthai(nxt+pd.Timedelta(days=2))}")
+st.caption(f"วางแผนวันที่ {dthai(d['plan_date'].min())} · ยอดนี้คือของที่ต้องผลิตวันถัดไป")
 nx=d[d["prod_date"]==nxt].sort_values("recommend",ascending=False)
 nx_show=nx[["cust","product_code","name","source","demand","recommend"]].rename(columns={
     "cust":"ลูกค้า","name":"ชื่อสินค้า","source":"แหล่ง","demand":"ยอดคาด","recommend":"ควรผลิต"})
 st.dataframe(nx_show, hide_index=True, use_container_width=True, height=360)
-st.caption(f"รวมควรผลิตวันนี้ {nx['recommend'].sum():,.0f} ชิ้น · PO {len(nx[nx['source']=='PO'])} / forecast {len(nx[nx['source']=='FC'])} รายการ")
+st.caption(f"รวมควรผลิต {nx['recommend'].sum():,.0f} ชิ้น · PO {len(nx[nx['source']=='PO'])} / forecast {len(nx[nx['source']=='FC'])} รายการ")
 
 # ─── forecast รอบถัดไป (ยังไม่มี PO — เตรียมล่วงหน้า) ───
 _byd = d.pivot_table(index="prod_date", columns="source", values="recommend", aggfunc="sum", fill_value=0)
@@ -78,7 +79,7 @@ _fc = _byd["FC"] if "FC" in _byd.columns else 0
 _fcdays = list(_byd.index[_fc > _po])
 if len(_fcdays):
     fnxt = min(_fcdays)
-    st.subheader(f"🔮 forecast รอบถัดไป (ยังไม่มี PO): ผลิต {dthai(fnxt)} · ส่งถึงลูกค้า {dthai(fnxt+pd.Timedelta(days=2))}")
+    st.subheader(f"🔮 forecast รอบถัดไป (ยังไม่มี PO): ผลิต {dthai(fnxt)} → ส่ง {dthai(fnxt+pd.Timedelta(days=1))} → ถึงลูกค้า {dthai(fnxt+pd.Timedelta(days=2))}")
     fx = d[d["prod_date"]==fnxt].sort_values("recommend", ascending=False)
     fx_show = fx[["cust","product_code","name","source","demand","recommend"]].rename(columns={
         "cust":"ลูกค้า","name":"ชื่อสินค้า","source":"แหล่ง","demand":"ยอดคาด","recommend":"ควรผลิต"})
