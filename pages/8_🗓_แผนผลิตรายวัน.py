@@ -72,11 +72,31 @@ nx_show=nx[["cust","product_code","name","source","demand","recommend"]].rename(
 st.dataframe(nx_show, hide_index=True, use_container_width=True, height=360)
 st.caption(f"รวมควรผลิต {nx['recommend'].sum():,.0f} ชิ้น · PO {len(nx[nx['source']=='PO'])} / forecast {len(nx[nx['source']=='FC'])} รายการ")
 
+# ─── วันถัดไปอีก 1 วัน (PO มาแล้วบางส่วน + เติม forecast ส่วนที่ขาด) ───
+_pdays = sorted(d["prod_date"].dropna().unique())
+if len(_pdays) >= 2:
+    n2 = pd.Timestamp(_pdays[1])
+    st.subheader(f"📦 วันถัดไป: ผลิต {dthai(n2)} → ส่ง {dthai(n2+pd.Timedelta(days=1))} → ถึงลูกค้า {dthai(n2+pd.Timedelta(days=2))}")
+    x2 = d[d["prod_date"]==n2].sort_values("recommend", ascending=False).copy()
+    _lab = {"PO":"PO ครบ","PO+FC":"PO บางส่วน + เติม forecast","FC":"forecast (ยังไม่มี PO)"}
+    x2["สถานะ"] = x2["source"].map(_lab).fillna(x2["source"])
+    cols2 = ["cust","product_code","name","สถานะ"] + [c for c in ["po_qty","fc_qty"] if c in x2.columns] + ["demand","recommend"]
+    st.dataframe(x2[cols2].rename(columns={"cust":"ลูกค้า","name":"ชื่อสินค้า","po_qty":"PO มาแล้ว",
+        "fc_qty":"forecast","demand":"ใช้วางแผน","recommend":"ควรผลิต"}), hide_index=True, use_container_width=True, height=360)
+    if "po_qty" in x2.columns:
+        st.caption(f"PO มาแล้ว {x2['po_qty'].sum():,.0f} · ใช้วางแผน {x2['demand'].sum():,.0f} · ควรผลิต {x2['recommend'].sum():,.0f} ชิ้น"
+                   " · ณ 4 วันก่อนส่ง PO มักมาแล้วราว 57% ส่วนที่ขาดเติมด้วย forecast · รันเช้าถัดไปจะอัปเดตตาม PO ที่เข้ามาเพิ่ม")
+
 # ─── forecast รอบถัดไป (ยังไม่มี PO — เตรียมล่วงหน้า) ───
-_byd = d.pivot_table(index="prod_date", columns="source", values="recommend", aggfunc="sum", fill_value=0)
-_po = _byd["PO"] if "PO" in _byd.columns else 0
-_fc = _byd["FC"] if "FC" in _byd.columns else 0
-_fcdays = list(_byd.index[_fc > _po])
+if "po_qty" in d.columns and len(_pdays):
+    _g = d.groupby("prod_date")[["po_qty","demand"]].sum()
+    _after = pd.Timestamp(_pdays[1]) if len(_pdays) > 1 else pd.Timestamp(_pdays[0])
+    _fcdays = [x for x in _g.index[_g["po_qty"] < 0.5*_g["demand"]] if x > _after]
+else:
+    _byd = d.pivot_table(index="prod_date", columns="source", values="recommend", aggfunc="sum", fill_value=0)
+    _po = _byd["PO"] if "PO" in _byd.columns else 0
+    _fc = _byd["FC"] if "FC" in _byd.columns else 0
+    _fcdays = list(_byd.index[_fc > _po])
 if len(_fcdays):
     fnxt = min(_fcdays)
     st.subheader(f"🔮 forecast รอบถัดไป (ยังไม่มี PO): ผลิต {dthai(fnxt)} → ส่ง {dthai(fnxt+pd.Timedelta(days=1))} → ถึงลูกค้า {dthai(fnxt+pd.Timedelta(days=2))}")
@@ -102,3 +122,38 @@ by=d.groupby([d["prod_date"],"cust"]).agg(ควรผลิต=("recommend","su
 by["วันผลิต"]=by["prod_date"].map(dthai)
 st.dataframe(by[["วันผลิต","cust","ควรผลิต","PO","FC"]].rename(columns={"cust":"ลูกค้า"}),
     hide_index=True, use_container_width=True)
+
+
+# ─── forecast เทียบ PO จริง (ข้อมูลไว้ปรับโมเดล) ───
+st.subheader("🎯 forecast เทียบ PO จริง (ไว้ปรับโมเดล)")
+ev = load_csv("fc_vs_actual.csv")
+if ev is None or not len(ev):
+    st.info("ยังไม่มีข้อมูล — ระบบบันทึก forecast ทุกครั้งที่รัน run_all_daily.bat แล้วจะเทียบให้เมื่อวันส่งนั้นผ่านไป (PO ครบ)")
+else:
+    _nan = float("nan")
+    ev["delivery_date"] = pd.to_datetime(ev["delivery_date"], errors="coerce")
+    if who.startswith("CJ"): ev = ev[ev["cust"]=="ซีเจ"]
+    elif who == "Big C": ev = ev[ev["cust"]=="BIG C"]
+    ev = ev[ev["delivery_date"] >= ev["delivery_date"].max() - pd.Timedelta(days=13)]
+    A = ev["actual"].sum()
+    if A > 0:
+        e1, e2, e3 = st.columns(3)
+        e1.metric("forecast รวม vs PO จริง", f"{100*(ev['fc'].sum()/A-1):+.1f}%", help="บวก = forecast สูงกว่าจริง · ลบ = ต่ำกว่าจริง (รวมทุกสินค้า)")
+        e2.metric("คลาดรายสินค้า (forecast)", f"{100*ev['fc_err'].abs().sum()/A:.1f}%", help="forecast ที่ทำไว้ ≥4 วันก่อนส่ง เทียบ PO จริงรายสินค้า (WAPE)")
+        e3.metric("คลาดรายสินค้า (แผน PO+forecast)", f"{100*ev['plan_err'].abs().sum()/A:.1f}%", help="ยอดที่ส่วน 'วันถัดไป' ใช้วางแผน ณ ตอนนั้น เทียบ PO จริง")
+    g = ev.groupby("delivery_date").agg(fc=("fc","sum"), plan=("plan_qty","sum"), act=("actual","sum"),
+            fe=("fc_err", lambda x: x.abs().sum()), pe=("plan_err", lambda x: x.abs().sum())).reset_index()
+    g = g.sort_values("delivery_date", ascending=False)
+    g["วันส่ง"] = g["delivery_date"].map(dthai)
+    g["ต่างรวม %"] = (100*(g["fc"]/g["act"].replace(0,_nan)-1)).round(1)
+    g["คลาดรายสินค้า % (forecast)"] = (100*g["fe"]/g["act"].replace(0,_nan)).round(1)
+    g["คลาดรายสินค้า % (แผน)"] = (100*g["pe"]/g["act"].replace(0,_nan)).round(1)
+    st.dataframe(g[["วันส่ง","fc","plan","act","ต่างรวม %","คลาดรายสินค้า % (forecast)","คลาดรายสินค้า % (แผน)"]]
+        .rename(columns={"fc":"forecast","plan":"แผน (PO+FC)","act":"PO จริง"}).round(1), hide_index=True, use_container_width=True)
+    st.caption("forecast ที่ใช้เทียบ = ตัวที่ระบบทำไว้อย่างน้อย 4 วันก่อนส่ง (ตรงกับส่วน 📦 วันถัดไป) · PO จริง = ยอดสั่งสุดท้ายหลังวันส่งผ่านไป")
+    top = ev.groupby(["cust","product_code","name"], dropna=False).agg(fc=("fc","sum"), act=("actual","sum"), err=("fc_err","sum")).reset_index()
+    top = top.reindex(top["err"].abs().sort_values(ascending=False).index).head(10)
+    top["ต่าง %"] = (100*(top["fc"]/top["act"].replace(0,_nan)-1)).round(0)
+    st.markdown("**สินค้าที่ forecast พลาดมากสุด (14 วันส่งล่าสุด)**")
+    st.dataframe(top[["cust","product_code","name","fc","act","err","ต่าง %"]].rename(columns={"cust":"ลูกค้า",
+        "name":"ชื่อสินค้า","fc":"forecast","act":"PO จริง","err":"ต่าง (ชิ้น)"}).round(0), hide_index=True, use_container_width=True)
