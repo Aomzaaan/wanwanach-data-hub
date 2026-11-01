@@ -65,12 +65,29 @@ c4.metric("รายการทั้งหมด", f"{len(d):,}")
 
 # ─── ไฮไลต์: วันผลิตถัดไป ───
 st.subheader(f"🔥 ผลิต {dthai(nxt)} → ส่ง {dthai(nxt+pd.Timedelta(days=1))} → ถึงลูกค้า {dthai(nxt+pd.Timedelta(days=2))}")
-st.caption(f"วางแผนวันที่ {dthai(d['plan_date'].min())} · ยอดนี้คือของที่ต้องผลิตวันถัดไป")
+_run = pd.to_datetime(d["run_at"].iloc[0], errors="coerce") if "run_at" in d.columns and len(d) else pd.NaT
+_runtxt = f" · คำนวณเมื่อ {dthai(_run)} {_run:%H:%M} น." if pd.notna(_run) else ""
+st.caption(f"วางแผนวันที่ {dthai(d['plan_date'].min())}{_runtxt} · ยอดนี้คือของที่ต้องผลิตวันถัดไป")
 nx=d[d["prod_date"]==nxt].sort_values("recommend",ascending=False)
-nx_show=nx[["cust","product_code","name","source","demand","recommend"]].rename(columns={
-    "cust":"ลูกค้า","name":"ชื่อสินค้า","source":"แหล่ง","demand":"ยอดคาด","recommend":"ควรผลิต"})
+_LAB = {"PO":"PO ครบ","PO+FC":"PO บางส่วน + เติม forecast","FC":"forecast (ยังไม่มี PO)"}
+if "po_arrived_pct" in nx.columns and len(nx):
+    _arr = nx.groupby("cust")["po_arrived_pct"].first()
+    _pend = {k: v for k, v in _arr.items() if pd.notna(v) and v < 95}
+    _txt = " · ".join(f"{'CJ' if k=='ซีเจ' else 'Big C'} ~{v:.0f}%" for k, v in _arr.items() if pd.notna(v))
+    if _pend:
+        _tip = ("· แนะนำรัน run_all_daily.bat อีกครั้งหลัง ~15:00 น. เพื่อได้ยอด PO ที่ครบกว่า"
+                if pd.notna(_run) and _run.hour < 15 else
+                "· ส่วนที่ยังไม่มา ระบบเผื่อด้วย forecast (+25%) ไว้แล้ว — ถ้า PO เข้าเพิ่มก่อนผลิต รันใหม่เพื่ออัปเดต")
+        st.warning(f"⏳ PO ของรอบนี้ยังมาไม่ครบ (ประเมินจากประวัติเวลาที่ PO เข้า: {_txt}) — ส่วนที่ขาดเติมด้วย forecast {_tip}")
+    elif _txt:
+        st.success(f"✅ PO ของรอบนี้ถือว่าครบแล้ว ({_txt}) — ใช้ยอด PO จริงเป็นหลัก")
+nx = nx.copy(); nx["สถานะ"] = nx["source"].map(_LAB).fillna(nx["source"])
+_c1 = ["cust","product_code","name","สถานะ"] + [c for c in ["po_qty","fc_qty"] if c in nx.columns] + ["demand","recommend"]
+nx_show=nx[_c1].rename(columns={"cust":"ลูกค้า","name":"ชื่อสินค้า","po_qty":"PO มาแล้ว",
+    "fc_qty":"forecast","demand":"ใช้วางแผน","recommend":"ควรผลิต"})
 st.dataframe(nx_show, hide_index=True, use_container_width=True, height=360)
-st.caption(f"รวมควรผลิต {nx['recommend'].sum():,.0f} ชิ้น · PO {len(nx[nx['source']=='PO'])} / forecast {len(nx[nx['source']=='FC'])} รายการ")
+st.caption(f"รวมควรผลิต {nx['recommend'].sum():,.0f} ชิ้น · PO ครบ {(nx['source']=='PO').sum()} / PO บางส่วน {(nx['source']=='PO+FC').sum()} / forecast {(nx['source']=='FC').sum()} รายการ"
+           " · ควรผลิต = PO +5% และส่วน forecast +25%")
 
 # ─── วันถัดไปอีก 1 วัน (PO มาแล้วบางส่วน + เติม forecast ส่วนที่ขาด) ───
 _pdays = sorted(d["prod_date"].dropna().unique())
@@ -78,14 +95,18 @@ if len(_pdays) >= 2:
     n2 = pd.Timestamp(_pdays[1])
     st.subheader(f"📦 วันถัดไป: ผลิต {dthai(n2)} → ส่ง {dthai(n2+pd.Timedelta(days=1))} → ถึงลูกค้า {dthai(n2+pd.Timedelta(days=2))}")
     x2 = d[d["prod_date"]==n2].sort_values("recommend", ascending=False).copy()
-    _lab = {"PO":"PO ครบ","PO+FC":"PO บางส่วน + เติม forecast","FC":"forecast (ยังไม่มี PO)"}
-    x2["สถานะ"] = x2["source"].map(_lab).fillna(x2["source"])
+    x2["สถานะ"] = x2["source"].map(_LAB).fillna(x2["source"])
     cols2 = ["cust","product_code","name","สถานะ"] + [c for c in ["po_qty","fc_qty"] if c in x2.columns] + ["demand","recommend"]
     st.dataframe(x2[cols2].rename(columns={"cust":"ลูกค้า","name":"ชื่อสินค้า","po_qty":"PO มาแล้ว",
         "fc_qty":"forecast","demand":"ใช้วางแผน","recommend":"ควรผลิต"}), hide_index=True, use_container_width=True, height=360)
     if "po_qty" in x2.columns:
+        _a2 = ""
+        if "po_arrived_pct" in x2.columns:
+            _g2 = x2.groupby("cust")["po_arrived_pct"].first().dropna()
+            if len(_g2):
+                _a2 = " · ตามประวัติ ณ เวลานี้ PO มักมาแล้ว " + " / ".join(f"{'CJ' if k=='ซีเจ' else 'Big C'} ~{v:.0f}%" for k, v in _g2.items())
         st.caption(f"PO มาแล้ว {x2['po_qty'].sum():,.0f} · ใช้วางแผน {x2['demand'].sum():,.0f} · ควรผลิต {x2['recommend'].sum():,.0f} ชิ้น"
-                   " · ณ 4 วันก่อนส่ง PO มักมาแล้วราว 57% ส่วนที่ขาดเติมด้วย forecast · รันเช้าถัดไปจะอัปเดตตาม PO ที่เข้ามาเพิ่ม")
+                   f"{_a2} · ส่วนที่ขาดเติมด้วย forecast · รันครั้งถัดไปจะอัปเดตตาม PO ที่เข้ามาเพิ่ม")
 
 # ─── forecast รอบถัดไป (ยังไม่มี PO — เตรียมล่วงหน้า) ───
 if "po_qty" in d.columns and len(_pdays):
@@ -118,9 +139,10 @@ st.dataframe(full, hide_index=True, use_container_width=True, height=460)
 # ─── สรุปรายวันผลิต ───
 st.subheader("📊 ยอดรวมแต่ละวันผลิต")
 by=d.groupby([d["prod_date"],"cust"]).agg(ควรผลิต=("recommend","sum"),
-    PO=("source",lambda x:(x=="PO").sum()),FC=("source",lambda x:(x=="FC").sum())).reset_index()
+    PO=("source",lambda x:(x=="PO").sum()),POFC=("source",lambda x:(x=="PO+FC").sum()),FC=("source",lambda x:(x=="FC").sum())).reset_index()
 by["วันผลิต"]=by["prod_date"].map(dthai)
-st.dataframe(by[["วันผลิต","cust","ควรผลิต","PO","FC"]].rename(columns={"cust":"ลูกค้า"}),
+st.dataframe(by[["วันผลิต","cust","ควรผลิต","PO","POFC","FC"]].rename(columns={"cust":"ลูกค้า",
+    "PO":"PO ครบ (รายการ)","POFC":"PO บางส่วน (รายการ)","FC":"forecast (รายการ)"}),
     hide_index=True, use_container_width=True)
 
 
