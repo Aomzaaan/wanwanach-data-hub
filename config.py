@@ -72,6 +72,16 @@ DATASETS = {
         "allowed_roles": ["admin", "internal", "external"],
         "update_freq": "รายเดือน",
     },
+    "product_daily": {
+        "name": "🥐 สินค้ารายวัน (Products Daily)",
+        "description": "ยอดขายสินค้ารายวัน × source × channel (2022–ปัจจุบัน)",
+        "source_type": "r2_csv",
+        "source_key": "aggregated/product_daily.csv",
+        "filters": ["product_code", "source", "channel"],
+        "date_col": "date",
+        "allowed_roles": ["admin", "internal", "external"],
+        "update_freq": "รายวัน",
+    },
     "location_monthly": {
         "name": "🗺️ พื้นที่รายเดือน (Locations)",
         "description": "ยอดขายรายเดือน × จังหวัด/พื้นที่",
